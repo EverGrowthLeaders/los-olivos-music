@@ -11,7 +11,7 @@ services:
       MUBERT_ACCESS_TOKEN: ${MUBERT_ACCESS_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MUSIC_MODEL: ${GEMINI_MUSIC_MODEL:-lyria-realtime-exp}
-      GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-3.1-flash-image-preview}
+      GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-3-pro-image-preview}
       GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemini-3.1-flash-lite-preview}
       YOUTUBE_CLIENT_SECRETS: /app/.secrets/client_secret.json
       YOUTUBE_TOKEN_FILE: /app/.secrets/youtube-token.json
@@ -45,7 +45,7 @@ services:
       MUBERT_ACCESS_TOKEN: ${MUBERT_ACCESS_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MUSIC_MODEL: ${GEMINI_MUSIC_MODEL:-lyria-realtime-exp}
-      GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-3.1-flash-image-preview}
+      GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-3-pro-image-preview}
       GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemini-3.1-flash-lite-preview}
       YOUTUBE_CLIENT_SECRETS: /app/.secrets/client_secret.json
       YOUTUBE_TOKEN_FILE: /app/.secrets/youtube-token.json
