@@ -21,11 +21,13 @@ def test_gemini_image_normalizes_video_resolution_to_2k():
 def test_gemini_image_prompt_prioritizes_account_style_and_forbids_text():
     prompt = GeminiImageProvider._compose_prompt(
         "Cozy study room, warm desk lamp",
-        "Channel aesthetic: austere trading terminal, graphite and green palette",
+        "Channel aesthetic: austere trading terminal, graphite and green palette\n"
+        "Thumbnail style: high contrast, central abstract market symbol",
     )
 
     assert "mandatory and has priority" in prompt
     assert "austere trading terminal" in prompt
+    assert "central abstract market symbol" in prompt
     assert "Category/use-case prompt:" in prompt
     assert "no text" in prompt.lower()
     assert "filenames" in prompt

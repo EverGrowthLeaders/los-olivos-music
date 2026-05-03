@@ -996,13 +996,19 @@
                 class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
             </div>
             <div>
+              <label class="block text-xs font-medium text-zinc-500 mb-1.5">Estilo de miniaturas</label>
+              <textarea x-model="settingsForm.CHANNEL_THUMBNAIL_STYLE" rows="3"
+                placeholder="Ej: alto contraste, composición limpia, sujeto central abstracto, look premium, sin texto ni logos..."
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
               <label class="block text-xs font-medium text-zinc-500 mb-1.5">Identidad sonora</label>
               <textarea x-model="settingsForm.CHANNEL_SONIC_IDENTITY" rows="3"
                 placeholder="Ej: ambient electrónico cálido, pulso sutil, bajos controlados, cero melodías intrusivas..."
                 class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
             </div>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-medium text-zinc-500 mb-1.5">Paleta de color</label>
               <input x-model="settingsForm.CHANNEL_COLOR_PALETTE" type="text"
@@ -1335,6 +1341,7 @@
           theme:          this.cleanMultiline(form.CHANNEL_THEME),
           aesthetic:      this.cleanMultiline(form.CHANNEL_AESTHETIC),
           visual_style:   this.cleanMultiline(form.CHANNEL_VISUAL_STYLE),
+          thumbnail_style:this.cleanMultiline(form.CHANNEL_THUMBNAIL_STYLE),
           color_palette:  this.cleanMultiline(form.CHANNEL_COLOR_PALETTE),
           sonic_identity: this.cleanMultiline(form.CHANNEL_SONIC_IDENTITY),
           avoid:          this.cleanMultiline(form.CHANNEL_AVOID),
@@ -1535,6 +1542,7 @@
           ...this.yamlBlock('theme', style.theme, '  '),
           ...this.yamlBlock('aesthetic', style.aesthetic, '  '),
           ...this.yamlBlock('visual_style', style.visual_style, '  '),
+          ...this.yamlBlock('thumbnail_style', style.thumbnail_style, '  '),
           ...this.yamlBlock('color_palette', style.color_palette, '  '),
           ...this.yamlBlock('sonic_identity', style.sonic_identity, '  '),
           ...this.yamlBlock('avoid', style.avoid, '  '),

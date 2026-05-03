@@ -73,6 +73,7 @@ class ChannelStyleConfig:
     theme: str | None = None
     aesthetic: str | None = None
     visual_style: str | None = None
+    thumbnail_style: str | None = None
     color_palette: str | None = None
     sonic_identity: str | None = None
     avoid: str | None = None
@@ -187,6 +188,8 @@ def channel_style_prompt(style: ChannelStyleConfig, *, media: str) -> str:
     if media == "image":
         if style.visual_style:
             lines.append(f"Visual language: {style.visual_style.strip()}")
+        if style.thumbnail_style:
+            lines.append(f"Thumbnail style: {style.thumbnail_style.strip()}")
         if style.color_palette:
             lines.append(f"Color palette: {style.color_palette.strip()}")
     if media == "music" and style.sonic_identity:
