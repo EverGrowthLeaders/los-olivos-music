@@ -61,8 +61,11 @@ def run_loaded_pipeline(
     audio_dir = ensure_dir(job_dir / "audio")
     image_dir = ensure_dir(job_dir / "images")
     render_dir = ensure_dir(job_dir / "render")
+    print(f"[pipeline] Job '{spec.job.slug}' started", flush=True)
+    print(f"[pipeline] Target duration: {spec.job.target_minutes:g} minutes", flush=True)
     metadata = build_metadata(spec, category)
     metadata_path = save_metadata(job_dir / "youtube_metadata.json", metadata)
+    print(f"[pipeline] Metadata ready: {metadata_path}", flush=True)
 
     asset_audio, asset_images = resolve_asset_paths(spec)
     audio_files = [p for p in asset_audio if p.exists()]
@@ -73,7 +76,13 @@ def run_loaded_pipeline(
         provider = get_music_provider(spec.music.provider)
         if provider is None:
             raise ValueError("No audio assets found and music.provider is assets/none")
+        print(
+            f"[audio] Generating {max(1, spec.music.track_count)} track(s) "
+            f"with provider '{spec.music.provider}'",
+            flush=True,
+        )
         audio_files = provider.generate(spec, category, audio_dir)
+    print(f"[audio] Ready: {len(audio_files)} source audio file(s)", flush=True)
 
     image_files = [p for p in asset_images if p.exists()]
     missing_images = [str(p) for p in asset_images if not p.exists()]
@@ -83,8 +92,14 @@ def run_loaded_pipeline(
         provider = get_image_provider(spec.images.provider)
         if provider is None:
             raise ValueError("No image assets found and images.provider is assets/none")
+        print(
+            f"[images] Generating {spec.images.count} image(s) with provider '{spec.images.provider}'",
+            flush=True,
+        )
         image_files = provider.generate(spec, category, image_dir)
+    print(f"[images] Ready: {len(image_files)} image file(s)", flush=True)
 
+    print("[render] Building final audio loop", flush=True)
     final_audio = make_audio_loop(
         audio_files,
         render_dir / f"{spec.job.slug}.m4a",
@@ -93,6 +108,8 @@ def run_loaded_pipeline(
         audio_bitrate=spec.video.audio_bitrate,
         normalize_audio=spec.video.normalize_audio,
     )
+    print(f"[render] Final audio ready: {final_audio}", flush=True)
+    print("[render] Building final video", flush=True)
     final_video = make_video(
         image_files,
         final_audio,
@@ -101,16 +118,23 @@ def run_loaded_pipeline(
         spec.video,
         render_dir,
     )
+    print(f"[render] Final video ready: {final_video}", flush=True)
+    print("[render] Building thumbnail", flush=True)
     thumbnail = make_thumbnail(image_files[0], metadata.title, render_dir / f"{spec.job.slug}_thumb.jpg")
+    print(f"[render] Thumbnail ready: {thumbnail}", flush=True)
 
     youtube_video_id = None
     should_upload = spec.youtube.upload if upload is None else upload
     if should_upload:
+        print("[youtube] Upload started", flush=True)
         youtube_video_id = upload_video(
             final_video,
             metadata,
             thumbnail_path=thumbnail if spec.youtube.set_thumbnail else None,
         )
+        print(f"[youtube] Upload complete: {youtube_video_id}", flush=True)
+    else:
+        print("[youtube] Upload skipped", flush=True)
 
     result = PipelineResult(
         job_dir=job_dir,
@@ -124,4 +148,5 @@ def run_loaded_pipeline(
         youtube_video_id=youtube_video_id,
     )
     write_json(job_dir / "result.json", result.to_json())
+    print(f"[pipeline] Job complete: {job_dir / 'result.json'}", flush=True)
     return result

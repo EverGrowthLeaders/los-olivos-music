@@ -43,14 +43,25 @@ class LyriaMusicProvider:
         model = self._normalize_model(spec.music.model or self.model)
         count = max(1, spec.music.track_count)
         paths: list[Path] = []
+        print(
+            f"[lyria] Starting generation: {count} track(s), "
+            f"{spec.music.track_duration_seconds}s each, model={model}",
+            flush=True,
+        )
 
         for idx in range(count):
             out = out_dir / f"lyria_track_{idx + 1:02d}.wav"
             sidecar = out.with_suffix(".json")
             if out.exists() and out.stat().st_size > 0:
+                print(f"[lyria] Track {idx + 1}/{count} already exists: {out}", flush=True)
                 paths.append(out)
                 continue
 
+            print(
+                f"[lyria] Track {idx + 1}/{count} started "
+                f"({spec.music.track_duration_seconds}s target)",
+                flush=True,
+            )
             track_prompt = self._build_track_prompt(
                 base_prompt=prompt,
                 track_number=idx + 1,
@@ -62,6 +73,8 @@ class LyriaMusicProvider:
                     model=model,
                     prompt=track_prompt,
                     duration_seconds=spec.music.track_duration_seconds,
+                    track_number=idx + 1,
+                    total_tracks=count,
                 )
             )
             if not audio_bytes:
@@ -71,6 +84,11 @@ class LyriaMusicProvider:
                 )
 
             self._write_wav(out, audio_bytes)
+            print(
+                f"[lyria] Track {idx + 1}/{count} saved: {out} "
+                f"({len(audio_bytes) / 1024 / 1024:.1f} MiB PCM)",
+                flush=True,
+            )
             write_json(
                 sidecar,
                 {
@@ -119,7 +137,15 @@ class LyriaMusicProvider:
             "label, performer, or copyrighted recording."
         )
 
-    async def _generate_pcm_stream(self, *, model: str, prompt: str, duration_seconds: int) -> bytes:
+    async def _generate_pcm_stream(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        duration_seconds: int,
+        track_number: int | None = None,
+        total_tracks: int | None = None,
+    ) -> bytes:
         try:
             from google import genai
             from google.genai import types
@@ -129,16 +155,33 @@ class LyriaMusicProvider:
         target_bytes = max(1, int(duration_seconds)) * PCM_SAMPLE_RATE * PCM_CHANNELS * PCM_SAMPLE_WIDTH
         chunks: list[bytes] = []
         client = genai.Client(api_key=self.api_key, http_options={"api_version": "v1alpha"})
+        last_logged_second = -1
+        label = (
+            f"Track {track_number}/{total_tracks}"
+            if track_number is not None and total_tracks is not None
+            else "Track"
+        )
 
         async with client.aio.live.music.connect(model=model) as session:
             await session.set_weighted_prompts(prompts=[types.WeightedPrompt(text=prompt, weight=1.0)])
             await session.play()
+            print(f"[lyria] {label}: stream opened", flush=True)
 
             try:
                 while sum(len(chunk) for chunk in chunks) < target_bytes:
                     async for message in session.receive():
                         for chunk in self._audio_chunks_from_message(message):
                             chunks.append(chunk)
+                            received_seconds = int(
+                                sum(len(item) for item in chunks)
+                                / (PCM_SAMPLE_RATE * PCM_CHANNELS * PCM_SAMPLE_WIDTH)
+                            )
+                            if received_seconds >= last_logged_second + 10 or received_seconds >= duration_seconds:
+                                last_logged_second = received_seconds
+                                print(
+                                    f"[lyria] {label}: received ~{received_seconds}/{duration_seconds}s",
+                                    flush=True,
+                                )
                             if sum(len(item) for item in chunks) >= target_bytes:
                                 break
                         if sum(len(item) for item in chunks) >= target_bytes:

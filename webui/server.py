@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -372,6 +372,16 @@ def get_run(slug: str) -> dict:
     return json.loads(result_file.read_text(encoding="utf-8"))
 
 
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots_txt() -> str:
+    return "User-agent: *\nDisallow:\n"
+
+
+@app.get("/favicon.ico")
+def favicon() -> Response:
+    return Response(status_code=204)
+
+
 class JobBody(BaseModel):
     spec_yaml: str
     upload: bool = False
@@ -389,8 +399,9 @@ async def run_job(body: JobBody) -> StreamingResponse:
             flag = "--upload" if body.upload else "--no-upload"
             cmd = _ymf_cmd() + ["render", tmp_path, "--workdir", workdir, flag]
 
-            env = os.environ.copy()
-            env.update(_load_env())
+            env = _merged_env()
+            print(f"[webui] Job request accepted: upload={body.upload}, workdir={workdir}", flush=True)
+            print(f"[webui] Starting subprocess: {' '.join(cmd)}", flush=True)
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -406,13 +417,16 @@ async def run_job(body: JobBody) -> StreamingResponse:
                 if not line:
                     break
                 text = line.decode("utf-8", errors="replace").rstrip()
+                print(f"[job] {text}", flush=True)
                 yield f"data: {json.dumps({'type': 'log', 'text': text})}\n\n"
 
             await process.wait()
             status = "success" if process.returncode == 0 else "error"
+            print(f"[webui] Job subprocess finished: status={status}, code={process.returncode}", flush=True)
             yield f"data: {json.dumps({'type': 'done', 'status': status, 'code': process.returncode})}\n\n"
 
         except Exception as exc:
+            print(f"[webui] Job failed before completion: {exc}", flush=True)
             yield f"data: {json.dumps({'type': 'error', 'text': str(exc)})}\n\n"
         finally:
             try:
