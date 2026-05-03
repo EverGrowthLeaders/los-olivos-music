@@ -27,11 +27,15 @@ ENV_FILE = Path(os.getenv("YMF_ENV_FILE", "/app/.secrets/.env" if Path("/app").e
 SCHEDULES_FILE = Path(
     os.getenv("YMF_SCHEDULES_FILE", "/app/.secrets/schedules.json" if Path("/app").exists() else str(PROJECT_ROOT / ".secrets" / "schedules.json"))
 )
+TENANTS_FILE = Path(
+    os.getenv("YMF_TENANTS_FILE", "/app/.secrets/tenants.json" if Path("/app").exists() else str(PROJECT_ROOT / ".secrets" / "tenants.json"))
+)
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 SCHEDULE_UNITS = {"minutes": 60, "hours": 3600, "days": 86400}
 DEFAULT_SCHEDULE_TIMEZONE = "Europe/Madrid"
+DEFAULT_TENANT_ID = "default"
 _scheduler_task: asyncio.Task | None = None
-_running_schedule_ids: set[str] = set()
+_running_schedule_ids: set[tuple[str, str]] = set()
 
 SETTING_KEYS = [
     "ELEVENLABS_API_KEY",
@@ -70,11 +74,11 @@ def _ymf_cmd() -> list[str]:
     return [sys.executable, "-m", "yt_music_factory"]
 
 
-def _load_env() -> dict[str, str]:
-    if not ENV_FILE.exists():
+def _load_env_file(path: Path) -> dict[str, str]:
+    if not path.exists():
         return {}
     result: dict[str, str] = {}
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -84,16 +88,53 @@ def _load_env() -> dict[str, str]:
     return result
 
 
-def _merged_env() -> dict[str, str]:
-    env = os.environ.copy()
-    env.update(_load_env())
+def _tenant_id(value: str | None) -> str:
+    value = re.sub(r"[^a-zA-Z0-9_-]", "-", value or DEFAULT_TENANT_ID).strip("-").lower()
+    return value or DEFAULT_TENANT_ID
+
+
+def _tenant_root(tenant_id: str | None) -> Path:
+    tenant_id = _tenant_id(tenant_id)
+    return ENV_FILE.parent if tenant_id == DEFAULT_TENANT_ID else ENV_FILE.parent / "tenants" / tenant_id
+
+
+def _tenant_env_file(tenant_id: str | None) -> Path:
+    tenant_id = _tenant_id(tenant_id)
+    return ENV_FILE if tenant_id == DEFAULT_TENANT_ID else _tenant_root(tenant_id) / ".env"
+
+
+def _tenant_schedules_file(tenant_id: str | None) -> Path:
+    tenant_id = _tenant_id(tenant_id)
+    return SCHEDULES_FILE if tenant_id == DEFAULT_TENANT_ID else _tenant_root(tenant_id) / "schedules.json"
+
+
+def _load_env(tenant_id: str | None = DEFAULT_TENANT_ID) -> dict[str, str]:
+    tenant_id = _tenant_id(tenant_id)
+    if tenant_id == DEFAULT_TENANT_ID:
+        return _load_env_file(ENV_FILE)
+    env = _load_env_file(ENV_FILE)
+    env.update(_load_env_file(_tenant_env_file(tenant_id)))
     return env
 
 
-def _write_env(updates: dict[str, str]) -> None:
-    ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+def _tenant_env_overrides(tenant_id: str | None) -> dict[str, str]:
+    return _load_env_file(_tenant_env_file(tenant_id))
+
+
+def _merged_env(tenant_id: str | None = DEFAULT_TENANT_ID) -> dict[str, str]:
+    tenant_id = _tenant_id(tenant_id)
+    env = os.environ.copy()
+    env.update(_load_env(tenant_id))
+    if tenant_id != DEFAULT_TENANT_ID and "YOUTUBE_TOKEN_FILE" not in _tenant_env_overrides(tenant_id):
+        env["YOUTUBE_TOKEN_FILE"] = str((_tenant_root(tenant_id) / "youtube-token.json").resolve())
+    return env
+
+
+def _write_env(updates: dict[str, str], tenant_id: str | None = DEFAULT_TENANT_ID) -> None:
+    env_file = _tenant_env_file(tenant_id)
+    env_file.parent.mkdir(parents=True, exist_ok=True)
     existing_lines = (
-        ENV_FILE.read_text(encoding="utf-8").splitlines() if ENV_FILE.exists() else []
+        env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
     )
     written: set[str] = set()
     result_lines: list[str] = []
@@ -114,11 +155,22 @@ def _write_env(updates: dict[str, str]) -> None:
         if key not in written:
             result_lines.append(f"{key}={value}")
 
-    ENV_FILE.write_text("\n".join(result_lines) + "\n", encoding="utf-8")
+    env_file.write_text("\n".join(result_lines) + "\n", encoding="utf-8")
 
 
-def _get_workdir() -> Path:
-    env = _load_env()
+def _base_workdir() -> Path:
+    env = _load_env(DEFAULT_TENANT_ID)
+    workdir = env.get("YMF_WORKDIR") or os.getenv("YMF_WORKDIR") or "./runs"
+    path = Path(workdir)
+    return path.resolve() if path.is_absolute() else (PROJECT_ROOT / path).resolve()
+
+
+def _get_workdir(tenant_id: str | None = DEFAULT_TENANT_ID) -> Path:
+    tenant_id = _tenant_id(tenant_id)
+    env = _load_env(tenant_id)
+    tenant_overrides = _tenant_env_overrides(tenant_id)
+    if tenant_id != DEFAULT_TENANT_ID and "YMF_WORKDIR" not in tenant_overrides:
+        return (_base_workdir() / "tenants" / tenant_id).resolve()
     workdir = env.get("YMF_WORKDIR") or os.getenv("YMF_WORKDIR") or "./runs"
     path = Path(workdir)
     return path.resolve() if path.is_absolute() else (PROJECT_ROOT / path).resolve()
@@ -183,12 +235,31 @@ def _path_from_env(env: dict[str, str], key: str, default: str) -> Path:
     return path.resolve() if path.is_absolute() else (PROJECT_ROOT / path).resolve()
 
 
-def _youtube_token_path(env: dict[str, str]) -> Path:
+def _youtube_token_path(env: dict[str, str], tenant_id: str | None = DEFAULT_TENANT_ID) -> Path:
+    tenant_id = _tenant_id(tenant_id)
+    if tenant_id != DEFAULT_TENANT_ID and "YOUTUBE_TOKEN_FILE" not in _tenant_env_overrides(tenant_id):
+        return (_tenant_root(tenant_id) / "youtube-token.json").resolve()
     return _path_from_env(env, "YOUTUBE_TOKEN_FILE", "/app/.secrets/youtube-token.json")
 
 
-def _oauth_state_path(env: dict[str, str]) -> Path:
-    return _youtube_token_path(env).with_name("youtube-oauth-state.json")
+def _oauth_state_path(env: dict[str, str], tenant_id: str | None = DEFAULT_TENANT_ID) -> Path:
+    return _youtube_token_path(env, tenant_id).with_name("youtube-oauth-state.json")
+
+
+def _find_oauth_state(state: str) -> tuple[str, Path, dict] | None:
+    for tenant in _load_tenants():
+        tenant_id = str(tenant.get("id") or DEFAULT_TENANT_ID)
+        env = _merged_env(tenant_id)
+        state_path = _oauth_state_path(env, tenant_id)
+        if not state_path.exists():
+            continue
+        try:
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if secrets.compare_digest(saved.get("state", ""), state):
+            return tenant_id, state_path, saved
+    return None
 
 
 def _external_base_url(request: Request) -> str:
@@ -249,19 +320,59 @@ def _load_categories() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def _load_schedules() -> list[dict]:
-    if not SCHEDULES_FILE.exists():
+def _load_tenants() -> list[dict]:
+    if TENANTS_FILE.exists():
+        try:
+            payload = json.loads(TENANTS_FILE.read_text(encoding="utf-8"))
+            tenants = payload if isinstance(payload, list) else []
+        except Exception:
+            tenants = []
+    else:
+        tenants = []
+    if not any(tenant.get("id") == DEFAULT_TENANT_ID for tenant in tenants):
+        tenants.insert(
+            0,
+            {
+                "id": DEFAULT_TENANT_ID,
+                "name": "Canal principal",
+                "created_at": 0,
+            },
+        )
+    return tenants
+
+
+def _save_tenants(tenants: list[dict]) -> None:
+    TENANTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TENANTS_FILE.write_text(json.dumps(tenants, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _tenant_exists(tenant_id: str | None) -> bool:
+    tenant_id = _tenant_id(tenant_id)
+    return any(tenant.get("id") == tenant_id for tenant in _load_tenants())
+
+
+def _ensure_tenant(tenant_id: str | None) -> str:
+    tenant_id = _tenant_id(tenant_id)
+    if not _tenant_exists(tenant_id):
+        raise HTTPException(404, f"Tenant '{tenant_id}' not found")
+    return tenant_id
+
+
+def _load_schedules(tenant_id: str | None = DEFAULT_TENANT_ID) -> list[dict]:
+    schedules_file = _tenant_schedules_file(tenant_id)
+    if not schedules_file.exists():
         return []
     try:
-        payload = json.loads(SCHEDULES_FILE.read_text(encoding="utf-8"))
+        payload = json.loads(schedules_file.read_text(encoding="utf-8"))
     except Exception:
         return []
     return payload if isinstance(payload, list) else []
 
 
-def _save_schedules(schedules: list[dict]) -> None:
-    SCHEDULES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SCHEDULES_FILE.write_text(json.dumps(schedules, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+def _save_schedules(schedules: list[dict], tenant_id: str | None = DEFAULT_TENANT_ID) -> None:
+    schedules_file = _tenant_schedules_file(tenant_id)
+    schedules_file.parent.mkdir(parents=True, exist_ok=True)
+    schedules_file.write_text(json.dumps(schedules, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _interval_seconds(schedule: dict) -> int:
@@ -320,7 +431,7 @@ def _channel_style_from_env(env: dict[str, str]) -> dict[str, str]:
     }
 
 
-def _schedule_spec_yaml(schedule: dict) -> tuple[str, str]:
+def _schedule_spec_yaml(schedule: dict, tenant_id: str | None = DEFAULT_TENANT_ID) -> tuple[str, str]:
     categories = _load_categories()
     category_key = str(schedule.get("category_key") or "focus_lofi")
     category = categories.get(category_key, {})
@@ -328,7 +439,7 @@ def _schedule_spec_yaml(schedule: dict) -> tuple[str, str]:
     suffix = secrets.token_hex(3)
     title_seed = str(schedule.get("title_seed") or category.get("label") or "automatic music mix")
     slug = f"{_safe_slug(title_seed)}-{now}-{suffix}"
-    env = _merged_env()
+    env = _merged_env(tenant_id)
     upload = bool(schedule.get("upload", True))
     spec = {
         "job": {
@@ -379,24 +490,26 @@ def _schedule_spec_yaml(schedule: dict) -> tuple[str, str]:
     return yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), slug
 
 
-def _update_schedule(schedule_id: str, updates: dict) -> dict | None:
-    schedules = _load_schedules()
+def _update_schedule(schedule_id: str, updates: dict, tenant_id: str | None = DEFAULT_TENANT_ID) -> dict | None:
+    schedules = _load_schedules(tenant_id)
     updated = None
     for schedule in schedules:
         if schedule.get("id") == schedule_id:
             schedule.update(updates)
             updated = schedule
             break
-    _save_schedules(schedules)
+    _save_schedules(schedules, tenant_id)
     return updated
 
 
-async def _run_schedule(schedule: dict) -> None:
+async def _run_schedule(schedule: dict, tenant_id: str | None = DEFAULT_TENANT_ID) -> None:
+    tenant_id = _tenant_id(tenant_id)
     schedule_id = str(schedule.get("id"))
-    if schedule_id in _running_schedule_ids:
+    run_key = (tenant_id, schedule_id)
+    if run_key in _running_schedule_ids:
         return
-    _running_schedule_ids.add(schedule_id)
-    spec_yaml, slug = _schedule_spec_yaml(schedule)
+    _running_schedule_ids.add(run_key)
+    spec_yaml, slug = _schedule_spec_yaml(schedule, tenant_id)
     _update_schedule(
         schedule_id,
         {
@@ -404,6 +517,7 @@ async def _run_schedule(schedule: dict) -> None:
             "last_started_at": time.time(),
             "last_slug": slug,
         },
+        tenant_id,
     )
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
@@ -413,21 +527,25 @@ async def _run_schedule(schedule: dict) -> None:
     try:
         upload = bool(schedule.get("upload", True))
         flag = "--upload" if upload else "--no-upload"
-        cmd = _ymf_cmd() + ["render", tmp_path, "--workdir", str(_get_workdir()), flag]
-        print(f"[scheduler] Starting '{schedule.get('name') or schedule_id}' as {slug}: {' '.join(cmd)}", flush=True)
+        cmd = _ymf_cmd() + ["render", tmp_path, "--workdir", str(_get_workdir(tenant_id)), flag]
+        print(
+            f"[scheduler] Starting tenant={tenant_id} '{schedule.get('name') or schedule_id}' "
+            f"as {slug}: {' '.join(cmd)}",
+            flush=True,
+        )
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=str(PROJECT_ROOT),
-            env=_merged_env(),
+            env=_merged_env(tenant_id),
         )
         assert process.stdout is not None
         while True:
             line = await process.stdout.readline()
             if not line:
                 break
-            print(f"[schedule:{schedule_id}] {line.decode('utf-8', errors='replace').rstrip()}", flush=True)
+            print(f"[schedule:{tenant_id}:{schedule_id}] {line.decode('utf-8', errors='replace').rstrip()}", flush=True)
         await process.wait()
         status = "success" if process.returncode == 0 else "error"
         _update_schedule(
@@ -439,8 +557,9 @@ async def _run_schedule(schedule: dict) -> None:
                 "next_run_at": _next_run_at(schedule),
                 "last_slug": slug,
             },
+            tenant_id,
         )
-        print(f"[scheduler] Finished '{schedule.get('name') or schedule_id}' status={status}", flush=True)
+        print(f"[scheduler] Finished tenant={tenant_id} '{schedule.get('name') or schedule_id}' status={status}", flush=True)
     except Exception as exc:
         _update_schedule(
             schedule_id,
@@ -451,10 +570,11 @@ async def _run_schedule(schedule: dict) -> None:
                 "next_run_at": _next_run_at(schedule),
                 "last_slug": slug,
             },
+            tenant_id,
         )
-        print(f"[scheduler] Failed '{schedule.get('name') or schedule_id}': {exc}", flush=True)
+        print(f"[scheduler] Failed tenant={tenant_id} '{schedule.get('name') or schedule_id}': {exc}", flush=True)
     finally:
-        _running_schedule_ids.discard(schedule_id)
+        _running_schedule_ids.discard(run_key)
         try:
             os.unlink(tmp_path)
         except Exception:
@@ -464,18 +584,20 @@ async def _run_schedule(schedule: dict) -> None:
 async def _scheduler_loop() -> None:
     while True:
         now = time.time()
-        for schedule in _load_schedules():
-            if not schedule.get("enabled"):
-                continue
-            schedule_id = str(schedule.get("id"))
-            if schedule_id in _running_schedule_ids:
-                continue
-            next_run_at = float(schedule.get("next_run_at") or _next_run_at(schedule, from_ts=now))
-            if "next_run_at" not in schedule:
-                _update_schedule(schedule_id, {"next_run_at": next_run_at})
-                continue
-            if next_run_at <= now:
-                asyncio.create_task(_run_schedule(schedule))
+        for tenant in _load_tenants():
+            tenant_id = str(tenant.get("id") or DEFAULT_TENANT_ID)
+            for schedule in _load_schedules(tenant_id):
+                if not schedule.get("enabled"):
+                    continue
+                schedule_id = str(schedule.get("id"))
+                if (tenant_id, schedule_id) in _running_schedule_ids:
+                    continue
+                next_run_at = float(schedule.get("next_run_at") or _next_run_at(schedule, from_ts=now))
+                if "next_run_at" not in schedule:
+                    _update_schedule(schedule_id, {"next_run_at": next_run_at}, tenant_id)
+                    continue
+                if next_run_at <= now:
+                    asyncio.create_task(_run_schedule(schedule, tenant_id))
         await asyncio.sleep(60)
 
 
@@ -516,16 +638,42 @@ def get_categories() -> dict:
     return _load_categories()
 
 
+class TenantBody(BaseModel):
+    name: str
+
+
+@app.get("/api/tenants")
+def list_tenants() -> list:
+    return _load_tenants()
+
+
+@app.post("/api/tenants")
+def create_tenant(body: TenantBody) -> dict:
+    tenants = _load_tenants()
+    tenant_id = _tenant_id(body.name)
+    if tenant_id == DEFAULT_TENANT_ID or any(tenant.get("id") == tenant_id for tenant in tenants):
+        tenant_id = f"{tenant_id}-{secrets.token_hex(2)}"
+    tenant = {"id": tenant_id, "name": body.name.strip() or tenant_id, "created_at": time.time()}
+    tenants.append(tenant)
+    _save_tenants(tenants)
+    _tenant_root(tenant_id).mkdir(parents=True, exist_ok=True)
+    return tenant
+
+
 @app.get("/api/settings")
-def get_settings() -> dict:
-    env = _load_env()
+def get_settings(tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    tenant_id = _ensure_tenant(tenant_id)
+    env = _merged_env(tenant_id)
+    if tenant_id != DEFAULT_TENANT_ID and "YMF_WORKDIR" not in _tenant_env_overrides(tenant_id):
+        env["YMF_WORKDIR"] = str(_get_workdir(tenant_id))
     return {key: env.get(key, os.getenv(key, "")) for key in SETTING_KEYS}
 
 
 @app.get("/api/youtube/status")
-def youtube_status(request: Request) -> dict:
-    env = _merged_env()
-    token_path = _youtube_token_path(env)
+def youtube_status(request: Request, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    tenant_id = _ensure_tenant(tenant_id)
+    env = _merged_env(tenant_id)
+    token_path = _youtube_token_path(env, tenant_id)
     redirect_uri = _youtube_redirect_uri(request, env)
     return {
         "connected": token_path.exists(),
@@ -536,13 +684,14 @@ def youtube_status(request: Request) -> dict:
 
 
 @app.post("/api/youtube/oauth/start")
-def start_youtube_oauth(request: Request) -> dict:
+def start_youtube_oauth(request: Request, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     try:
         from google_auth_oauthlib.flow import Flow
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, "Google OAuth libraries are not installed") from exc
 
-    env = _merged_env()
+    tenant_id = _ensure_tenant(tenant_id)
+    env = _merged_env(tenant_id)
     redirect_uri = _youtube_redirect_uri(request, env)
     client_config = _youtube_client_config(env, redirect_uri)
     if client_config is None:
@@ -560,12 +709,13 @@ def start_youtube_oauth(request: Request) -> dict:
         include_granted_scopes="true",
         prompt="consent",
     )
-    state_path = _oauth_state_path(env)
+    state_path = _oauth_state_path(env, tenant_id)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(
         json.dumps(
             {
                 "state": state,
+                "tenant_id": tenant_id,
                 "redirect_uri": redirect_uri,
                 "code_verifier": getattr(flow, "code_verifier", None),
             }
@@ -588,13 +738,11 @@ def youtube_oauth_callback(request: Request, code: str | None = None, state: str
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, "Google OAuth libraries are not installed") from exc
 
-    env = _merged_env()
-    state_path = _oauth_state_path(env)
-    if not state_path.exists():
-        return HTMLResponse("<h1>YouTube OAuth error</h1><p>OAuth state expired. Start again.</p>", status_code=400)
-    saved = json.loads(state_path.read_text(encoding="utf-8"))
-    if not secrets.compare_digest(saved.get("state", ""), state):
+    found_state = _find_oauth_state(state)
+    if found_state is None:
         return HTMLResponse("<h1>YouTube OAuth error</h1><p>Invalid OAuth state.</p>", status_code=400)
+    tenant_id, state_path, saved = found_state
+    env = _merged_env(tenant_id)
 
     redirect_uri = saved.get("redirect_uri") or _youtube_redirect_uri(request, env)
     client_config = _youtube_client_config(env, redirect_uri)
@@ -619,7 +767,7 @@ def youtube_oauth_callback(request: Request, code: str | None = None, state: str
             status_code=400,
         )
 
-    token_path = _youtube_token_path(env)
+    token_path = _youtube_token_path(env, tenant_id)
     token_path.parent.mkdir(parents=True, exist_ok=True)
     token_path.write_text(flow.credentials.to_json(), encoding="utf-8")
     try:
@@ -648,13 +796,14 @@ class SettingsBody(BaseModel):
 
 
 @app.post("/api/settings")
-def update_settings(body: SettingsBody) -> dict:
+def update_settings(body: SettingsBody, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    tenant_id = _ensure_tenant(tenant_id)
     filtered = {
         k: v
         for k, v in body.settings.items()
         if k in SETTING_KEYS and (v or not os.getenv(k))
     }
-    _write_env(filtered)
+    _write_env(filtered, tenant_id)
     return {"status": "saved"}
 
 
@@ -663,12 +812,14 @@ class ScheduleBody(BaseModel):
 
 
 @app.get("/api/schedules")
-def list_schedules() -> list:
-    return sorted(_load_schedules(), key=lambda item: item.get("created_at") or 0, reverse=True)
+def list_schedules(tenant_id: str = DEFAULT_TENANT_ID) -> list:
+    tenant_id = _ensure_tenant(tenant_id)
+    return sorted(_load_schedules(tenant_id), key=lambda item: item.get("created_at") or 0, reverse=True)
 
 
 @app.post("/api/schedules")
-def create_schedule(body: ScheduleBody) -> dict:
+def create_schedule(body: ScheduleBody, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    tenant_id = _ensure_tenant(tenant_id)
     schedule = dict(body.schedule)
     schedule["id"] = secrets.token_urlsafe(8)
     schedule["created_at"] = time.time()
@@ -679,14 +830,15 @@ def create_schedule(body: ScheduleBody) -> dict:
     if schedule.get("frequency_unit") == "days" and not schedule.get("run_time"):
         schedule["run_time"] = "09:00"
     schedule["next_run_at"] = _next_run_at(schedule)
-    schedules = _load_schedules()
+    schedules = _load_schedules(tenant_id)
     schedules.append(schedule)
-    _save_schedules(schedules)
+    _save_schedules(schedules, tenant_id)
     return schedule
 
 
 @app.put("/api/schedules/{schedule_id}")
-def update_schedule(schedule_id: str, body: ScheduleBody) -> dict:
+def update_schedule(schedule_id: str, body: ScheduleBody, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    tenant_id = _ensure_tenant(tenant_id)
     updates = dict(body.schedule)
     updates["updated_at"] = time.time()
     if "frequency_value" in updates:
@@ -694,38 +846,41 @@ def update_schedule(schedule_id: str, body: ScheduleBody) -> dict:
     if updates.get("frequency_unit") not in SCHEDULE_UNITS:
         updates.pop("frequency_unit", None)
     if any(key in updates for key in ("frequency_value", "frequency_unit", "run_time")):
-        existing = next((item for item in _load_schedules() if item.get("id") == schedule_id), {})
+        existing = next((item for item in _load_schedules(tenant_id) if item.get("id") == schedule_id), {})
         preview = {**existing, **updates}
         updates["next_run_at"] = _next_run_at(preview)
-    updated = _update_schedule(schedule_id, updates)
+    updated = _update_schedule(schedule_id, updates, tenant_id)
     if updated is None:
         raise HTTPException(404, f"Schedule '{schedule_id}' not found")
     return updated
 
 
 @app.delete("/api/schedules/{schedule_id}")
-def delete_schedule(schedule_id: str) -> dict:
-    schedules = _load_schedules()
+def delete_schedule(schedule_id: str, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    tenant_id = _ensure_tenant(tenant_id)
+    schedules = _load_schedules(tenant_id)
     remaining = [schedule for schedule in schedules if schedule.get("id") != schedule_id]
     if len(remaining) == len(schedules):
         raise HTTPException(404, f"Schedule '{schedule_id}' not found")
-    _save_schedules(remaining)
+    _save_schedules(remaining, tenant_id)
     return {"status": "deleted"}
 
 
 @app.post("/api/schedules/{schedule_id}/run")
-async def run_schedule_now(schedule_id: str) -> dict:
-    updated = _update_schedule(schedule_id, {"next_run_at": time.time(), "updated_at": time.time()})
+async def run_schedule_now(schedule_id: str, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    tenant_id = _ensure_tenant(tenant_id)
+    updated = _update_schedule(schedule_id, {"next_run_at": time.time(), "updated_at": time.time()}, tenant_id)
     if updated is None:
         raise HTTPException(404, f"Schedule '{schedule_id}' not found")
-    if schedule_id not in _running_schedule_ids:
-        asyncio.create_task(_run_schedule(updated))
+    if (tenant_id, schedule_id) not in _running_schedule_ids:
+        asyncio.create_task(_run_schedule(updated, tenant_id))
     return updated
 
 
 @app.get("/api/runs")
-def list_runs() -> list:
-    workdir = _get_workdir()
+def list_runs(tenant_id: str = DEFAULT_TENANT_ID) -> list:
+    tenant_id = _ensure_tenant(tenant_id)
+    workdir = _get_workdir(tenant_id)
     if not workdir.exists():
         return []
     runs = []
@@ -739,8 +894,9 @@ def list_runs() -> list:
 
 
 @app.get("/api/runs/{slug}")
-def get_run(slug: str) -> dict:
-    workdir = _get_workdir()
+def get_run(slug: str, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    tenant_id = _ensure_tenant(tenant_id)
+    workdir = _get_workdir(tenant_id)
     snapshot = _run_snapshot(workdir / slug)
     if snapshot is None:
         raise HTTPException(404, f"Run '{slug}' not found")
@@ -763,19 +919,20 @@ class JobBody(BaseModel):
 
 
 @app.post("/api/jobs")
-async def run_job(body: JobBody) -> StreamingResponse:
+async def run_job(body: JobBody, tenant_id: str = DEFAULT_TENANT_ID) -> StreamingResponse:
+    tenant_id = _ensure_tenant(tenant_id)
     async def generate():
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
             f.write(body.spec_yaml)
             tmp_path = f.name
 
         try:
-            workdir = str(_get_workdir())
+            workdir = str(_get_workdir(tenant_id))
             flag = "--upload" if body.upload else "--no-upload"
             cmd = _ymf_cmd() + ["render", tmp_path, "--workdir", workdir, flag]
 
-            env = _merged_env()
-            print(f"[webui] Job request accepted: upload={body.upload}, workdir={workdir}", flush=True)
+            env = _merged_env(tenant_id)
+            print(f"[webui] Job request accepted: tenant={tenant_id}, upload={body.upload}, workdir={workdir}", flush=True)
             print(f"[webui] Starting subprocess: {' '.join(cmd)}", flush=True)
 
             process = await asyncio.create_subprocess_exec(
@@ -817,14 +974,15 @@ async def run_job(body: JobBody) -> StreamingResponse:
 
 
 @app.get("/api/download")
-def download_file(path: str) -> FileResponse:
+def download_file(path: str, tenant_id: str = DEFAULT_TENANT_ID) -> FileResponse:
+    tenant_id = _ensure_tenant(tenant_id)
     file_path = Path(path)
     if not file_path.is_absolute():
         file_path = PROJECT_ROOT / file_path
     file_path = file_path.resolve()
     if not file_path.exists():
         raise HTTPException(404, "File not found")
-    workdir = _get_workdir()
+    workdir = _get_workdir(tenant_id)
     try:
         file_path.relative_to(workdir)
     except ValueError:

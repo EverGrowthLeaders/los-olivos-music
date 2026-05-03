@@ -37,7 +37,22 @@
         </template>
       </div>
 
-      <div class="ml-auto flex items-center gap-2 flex-shrink-0">
+      <div class="ml-auto flex items-center gap-2">
+        <select x-model="activeTenantId" @change="switchTenant()"
+          class="bg-zinc-950 border border-zinc-800 rounded-md px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-violet-500">
+          <template x-for="tenant in tenants" :key="tenant.id">
+            <option :value="tenant.id" x-text="tenant.name"></option>
+          </template>
+        </select>
+        <input x-model="tenantFormName" type="text" placeholder="Nuevo canal"
+          class="w-28 bg-zinc-950 border border-zinc-800 rounded-md px-2 py-1.5 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500">
+        <button @click="createTenant()"
+          class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors">
+          +
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 flex-shrink-0">
         <div class="w-1.5 h-1.5 rounded-full transition-colors"
           :class="{
             'bg-green-500': health?.status === 'ok',
@@ -615,25 +630,25 @@
 
             <div class="flex flex-wrap gap-2">
               <template x-if="run.final_video">
-                <a :href="'/api/download?path=' + encodeURIComponent(run.final_video)" download
+                <a :href="downloadUrl(run.final_video)" download
                   class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                   ↓ Video MP4
                 </a>
               </template>
               <template x-if="run.thumbnail">
-                <a :href="'/api/download?path=' + encodeURIComponent(run.thumbnail)" download
+                <a :href="downloadUrl(run.thumbnail)" download
                   class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                   ↓ Thumbnail
                 </a>
               </template>
               <template x-if="run.metadata_path">
-                <a :href="'/api/download?path=' + encodeURIComponent(run.metadata_path)" download
+                <a :href="downloadUrl(run.metadata_path)" download
                   class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                   ↓ Metadata JSON
                 </a>
               </template>
               <template x-if="run.final_audio">
-                <a :href="'/api/download?path=' + encodeURIComponent(run.final_audio)" download
+                <a :href="downloadUrl(run.final_audio)" download
                   class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                   ↓ Audio M4A
                 </a>
@@ -1027,6 +1042,9 @@
       ],
 
       health:     null,
+      tenants:    [],
+      activeTenantId: localStorage.getItem('ymf_active_tenant') || 'default',
+      tenantFormName: '',
       categories: {},
       settings:   {},
       runs:       [],
@@ -1126,6 +1144,7 @@
 
       // ── Init ──
       async init() {
+        await this.loadTenants();
         await Promise.all([
           this.loadHealth(),
           this.loadCategories(),
@@ -1247,6 +1266,56 @@
         return this.cleanMultiline(cat.image_prompt || '');
       },
 
+      api(path) {
+        const separator = path.includes('?') ? '&' : '?';
+        return `${path}${separator}tenant_id=${encodeURIComponent(this.activeTenantId || 'default')}`;
+      },
+
+      downloadUrl(path) {
+        return this.api('/api/download?path=' + encodeURIComponent(path));
+      },
+
+      async loadTenants() {
+        try {
+          const r = await fetch('/api/tenants');
+          this.tenants = await r.json();
+          if (!this.tenants.some(t => t.id === this.activeTenantId)) {
+            this.activeTenantId = 'default';
+            localStorage.setItem('ymf_active_tenant', this.activeTenantId);
+          }
+        } catch {
+          this.tenants = [{ id: 'default', name: 'Canal principal' }];
+        }
+      },
+
+      async createTenant() {
+        const name = this.tenantFormName.trim();
+        if (!name) return;
+        try {
+          const r = await fetch('/api/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+          });
+          if (!r.ok) return;
+          const tenant = await r.json();
+          this.tenantFormName = '';
+          await this.loadTenants();
+          this.activeTenantId = tenant.id;
+          await this.switchTenant();
+        } catch { /* ignore */ }
+      },
+
+      async switchTenant() {
+        localStorage.setItem('ymf_active_tenant', this.activeTenantId);
+        await Promise.all([
+          this.loadSettings(),
+          this.loadRuns(),
+          this.loadSchedules(),
+          this.loadYoutubeStatus(),
+        ]);
+      },
+
       // ── Data loaders ──
       async loadHealth() {
         try {
@@ -1266,7 +1335,7 @@
 
       async loadSettings() {
         try {
-          const r = await fetch('/api/settings');
+          const r = await fetch(this.api('/api/settings'));
           const data = await r.json();
           this.settings = data;
           this.settingsForm = { ...data };
@@ -1284,7 +1353,7 @@
 
       async loadYoutubeStatus() {
         try {
-          const r = await fetch('/api/youtube/status');
+          const r = await fetch(this.api('/api/youtube/status'));
           this.youtubeStatus = await r.json();
         } catch {
           this.youtubeStatus = {};
@@ -1293,14 +1362,14 @@
 
       async loadRuns() {
         try {
-          const r = await fetch('/api/runs');
+          const r = await fetch(this.api('/api/runs'));
           this.runs = await r.json();
         } catch { /* ignore */ }
       },
 
       async loadSchedules() {
         try {
-          const r = await fetch('/api/schedules');
+          const r = await fetch(this.api('/api/schedules'));
           this.schedules = await r.json();
         } catch { /* ignore */ }
       },
@@ -1319,7 +1388,7 @@
       async createSchedule() {
         this.isSavingSchedule = true;
         try {
-          const r = await fetch('/api/schedules', {
+          const r = await fetch(this.api('/api/schedules'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ schedule: this.schedulePayload() }),
@@ -1335,7 +1404,7 @@
 
       async toggleSchedule(schedule) {
         try {
-          await fetch('/api/schedules/' + schedule.id, {
+          await fetch(this.api('/api/schedules/' + schedule.id), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ schedule: { enabled: !schedule.enabled } }),
@@ -1346,14 +1415,14 @@
 
       async runScheduleNow(schedule) {
         try {
-          await fetch('/api/schedules/' + schedule.id + '/run', { method: 'POST' });
+          await fetch(this.api('/api/schedules/' + schedule.id + '/run'), { method: 'POST' });
           await this.loadSchedules();
         } catch { /* ignore */ }
       },
 
       async deleteSchedule(schedule) {
         try {
-          await fetch('/api/schedules/' + schedule.id, { method: 'DELETE' });
+          await fetch(this.api('/api/schedules/' + schedule.id), { method: 'DELETE' });
           await this.loadSchedules();
         } catch { /* ignore */ }
       },
@@ -1449,7 +1518,7 @@
         this.jobStatus = null;
 
         try {
-          const response = await fetch('/api/jobs', {
+          const response = await fetch(this.api('/api/jobs'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ spec_yaml: this.generateYaml(), upload: this.jobForm.upload }),
@@ -1510,7 +1579,7 @@
         this.isSaving = true;
         this.settingsSaved = false;
         try {
-          const r = await fetch('/api/settings', {
+          const r = await fetch(this.api('/api/settings'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ settings: this.settingsForm }),
@@ -1531,7 +1600,7 @@
         try {
           await this.saveSettings();
           const popup = window.open('', 'youtube-oauth', 'width=720,height=760');
-          const r = await fetch('/api/youtube/oauth/start', { method: 'POST' });
+          const r = await fetch(this.api('/api/youtube/oauth/start'), { method: 'POST' });
           const data = await r.json().catch(() => ({}));
           if (!r.ok) throw new Error(data.detail || 'No se pudo iniciar OAuth');
           if (popup) {
