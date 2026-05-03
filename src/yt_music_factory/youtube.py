@@ -48,7 +48,14 @@ def upload_video(
         raise RuntimeError(f"YouTube upload response did not include a video id: {response}")
     if thumbnail_path and thumbnail_path.exists():
         thumb_media = MediaFileUpload(str(thumbnail_path), mimetype="image/jpeg", resumable=False)
-        service.thumbnails().set(videoId=video_id, media_body=thumb_media).execute()
+        try:
+            service.thumbnails().set(videoId=video_id, media_body=thumb_media).execute()
+        except Exception as exc:  # noqa: BLE001
+            print(
+                "[youtube] Thumbnail upload skipped: "
+                f"{exc}. The video was uploaded successfully.",
+                flush=True,
+            )
     return str(video_id)
 
 

@@ -107,6 +107,60 @@ def _get_workdir() -> Path:
     return path.resolve() if path.is_absolute() else (PROJECT_ROOT / path).resolve()
 
 
+def _latest_mtime(path: Path) -> float:
+    try:
+        latest = path.stat().st_mtime
+    except OSError:
+        return 0
+    for child in path.rglob("*"):
+        try:
+            latest = max(latest, child.stat().st_mtime)
+        except OSError:
+            pass
+    return latest
+
+
+def _first_existing(paths: list[Path]) -> str | None:
+    for path in paths:
+        if path.exists():
+            return str(path)
+    return None
+
+
+def _run_snapshot(run_dir: Path) -> dict | None:
+    result_file = run_dir / "result.json"
+    data: dict = {}
+    created_at = _latest_mtime(run_dir)
+
+    if result_file.exists():
+        try:
+            data = json.loads(result_file.read_text(encoding="utf-8"))
+            created_at = result_file.stat().st_mtime
+        except Exception:
+            data = {}
+
+    slug = run_dir.name
+    render_dir = run_dir / "render"
+    inferred = {
+        "job_dir": str(run_dir),
+        "metadata_path": _first_existing([run_dir / "youtube_metadata.json"]),
+        "final_audio": _first_existing([render_dir / f"{slug}.m4a"]),
+        "final_video": _first_existing([render_dir / f"{slug}.mp4"]),
+        "thumbnail": _first_existing([render_dir / f"{slug}_thumb.jpg"]),
+    }
+    inferred["audio_files"] = data.get("audio_files") or [
+        str(path) for path in sorted((run_dir / "audio").glob("*")) if path.is_file()
+    ]
+    inferred["image_files"] = data.get("image_files") or [
+        str(path) for path in sorted((run_dir / "images").glob("*")) if path.is_file()
+    ]
+
+    snapshot = {**inferred, **data}
+    if not any(snapshot.get(key) for key in ("final_video", "final_audio", "thumbnail", "metadata_path")):
+        return None
+    return {"slug": slug, "created_at": created_at, **snapshot}
+
+
 def _path_from_env(env: dict[str, str], key: str, default: str) -> Path:
     path = Path(env.get(key) or default)
     return path.resolve() if path.is_absolute() else (PROJECT_ROOT / path).resolve()
@@ -350,26 +404,22 @@ def list_runs() -> list:
     if not workdir.exists():
         return []
     runs = []
-    for result_file in sorted(
-        workdir.glob("*/result.json"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    ):
-        try:
-            data = json.loads(result_file.read_text(encoding="utf-8"))
-            runs.append({"slug": result_file.parent.name, "created_at": result_file.stat().st_mtime, **data})
-        except Exception:
-            pass
-    return runs
+    for run_dir in workdir.iterdir():
+        if not run_dir.is_dir():
+            continue
+        snapshot = _run_snapshot(run_dir)
+        if snapshot:
+            runs.append(snapshot)
+    return sorted(runs, key=lambda run: run.get("created_at") or 0, reverse=True)
 
 
 @app.get("/api/runs/{slug}")
 def get_run(slug: str) -> dict:
     workdir = _get_workdir()
-    result_file = workdir / slug / "result.json"
-    if not result_file.exists():
+    snapshot = _run_snapshot(workdir / slug)
+    if snapshot is None:
         raise HTTPException(404, f"Run '{slug}' not found")
-    return json.loads(result_file.read_text(encoding="utf-8"))
+    return snapshot
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)

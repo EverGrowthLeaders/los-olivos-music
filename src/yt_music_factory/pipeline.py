@@ -123,19 +123,6 @@ def run_loaded_pipeline(
     thumbnail = make_thumbnail(image_files[0], metadata.title, render_dir / f"{spec.job.slug}_thumb.jpg")
     print(f"[render] Thumbnail ready: {thumbnail}", flush=True)
 
-    youtube_video_id = None
-    should_upload = spec.youtube.upload if upload is None else upload
-    if should_upload:
-        print("[youtube] Upload started", flush=True)
-        youtube_video_id = upload_video(
-            final_video,
-            metadata,
-            thumbnail_path=thumbnail if spec.youtube.set_thumbnail else None,
-        )
-        print(f"[youtube] Upload complete: {youtube_video_id}", flush=True)
-    else:
-        print("[youtube] Upload skipped", flush=True)
-
     result = PipelineResult(
         job_dir=job_dir,
         audio_files=audio_files,
@@ -145,8 +132,25 @@ def run_loaded_pipeline(
         thumbnail=thumbnail,
         metadata_path=metadata_path,
         metadata=metadata,
-        youtube_video_id=youtube_video_id,
     )
-    write_json(job_dir / "result.json", result.to_json())
-    print(f"[pipeline] Job complete: {job_dir / 'result.json'}", flush=True)
+    result_path = job_dir / "result.json"
+    write_json(result_path, result.to_json())
+    print(f"[pipeline] Render result saved: {result_path}", flush=True)
+
+    youtube_video_id = None
+    should_upload = spec.youtube.upload if upload is None else upload
+    if should_upload:
+        print("[youtube] Upload started", flush=True)
+        youtube_video_id = upload_video(
+            final_video,
+            metadata,
+            thumbnail_path=thumbnail if spec.youtube.set_thumbnail else None,
+        )
+        result.youtube_video_id = youtube_video_id
+        write_json(result_path, result.to_json())
+        print(f"[youtube] Upload complete: {youtube_video_id}", flush=True)
+    else:
+        print("[youtube] Upload skipped", flush=True)
+
+    print(f"[pipeline] Job complete: {result_path}", flush=True)
     return result

@@ -221,10 +221,16 @@
         <h2 class="text-sm font-medium text-zinc-400 mb-4">Información básica del video</h2>
         <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5 mb-6">
           <div>
-            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Slug <span class="text-zinc-600">(identificador único)</span></label>
-            <input x-model="jobForm.slug" type="text" placeholder="mi-video-lofi-01"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors font-mono">
-            <p class="text-xs text-zinc-700 mt-1">Sin espacios ni caracteres especiales. Nombra los archivos de salida.</p>
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Slug automático <span class="text-zinc-600">(archivos de salida)</span></label>
+            <div class="flex gap-2">
+              <input x-model="jobForm.slug" @input="slugAuto = false" type="text" placeholder="se-generará-automáticamente"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors font-mono">
+              <button @click="refreshSlug()" type="button"
+                class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+                ↻
+              </button>
+            </div>
+            <p class="text-xs text-zinc-700 mt-1">Lo generamos con sufijo único; solo tócalo si quieres reutilizar una carpeta concreta.</p>
           </div>
           <div>
             <label class="block text-xs font-medium text-zinc-400 mb-1.5">Semilla del título</label>
@@ -245,7 +251,7 @@
         </div>
         <div class="flex justify-between">
           <button @click="step = 1" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-5 py-2 rounded-lg text-sm font-medium transition-colors">← Atrás</button>
-          <button @click="step = 3" :disabled="!jobForm.slug"
+          <button @click="ensureSlug(); step = 3"
             class="bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
             Siguiente →
           </button>
@@ -829,6 +835,8 @@
       logs: [],
       jobStatus: null,
       copied: false,
+      slugAuto: true,
+      slugSuffix: '',
 
       jobForm: {
         category_key:   '',
@@ -908,13 +916,14 @@
           }
         });
 
-        // Auto-generate slug from title_seed
+        this.refreshSlug();
+
+        // Keep the automatic slug readable while the user edits the seed.
         this.$watch('jobForm.title_seed', (val) => {
-          const generated = this.slugify(val);
-          const prev = this.slugify(val.slice(0, -1));
-          if (!this.jobForm.slug || this.jobForm.slug === prev) {
-            this.jobForm.slug = generated;
-          }
+          if (this.slugAuto) this.ensureSlug(true);
+        });
+        this.$watch('jobForm.category_key', () => {
+          if (this.slugAuto) this.ensureSlug(true);
         });
       },
 
@@ -929,6 +938,31 @@
         if (!this.jobForm.seo_keyword && cat.primary_keywords?.length) {
           this.jobForm.seo_keyword = cat.primary_keywords[0];
         }
+      },
+
+      newSlugSuffix() {
+        return Math.random().toString(36).slice(2, 7);
+      },
+
+      slugBase() {
+        const cat = this.categories[this.jobForm.category_key] || {};
+        return this.slugify(this.jobForm.title_seed || cat.label || this.jobForm.category_key || 'video');
+      },
+
+      ensureSlug(keepSuffix = false) {
+        if (!this.slugSuffix || !keepSuffix) {
+          this.slugSuffix = this.newSlugSuffix();
+        }
+        const base = this.slugBase() || 'video';
+        if (this.slugAuto || !this.jobForm.slug) {
+          this.jobForm.slug = `${base}-${this.slugSuffix}`;
+        }
+        return this.jobForm.slug;
+      },
+
+      refreshSlug() {
+        this.slugAuto = true;
+        this.ensureSlug(false);
       },
 
       slugify(text) {
@@ -986,6 +1020,7 @@
       // ── YAML generation ──
       generateYaml() {
         const f = this.jobForm;
+        this.ensureSlug(true);
         const cat = this.categories[f.category_key] || {};
         const keyword = f.seo_keyword || (cat.primary_keywords || [''])[0];
 
