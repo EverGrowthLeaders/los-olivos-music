@@ -674,15 +674,18 @@ def _normalize_category(payload: dict) -> dict:
             value = [item.strip() for item in re.split(r"[,\n]", value) if item.strip()]
         return [str(item).strip() for item in value if str(item).strip()]
 
+    label = str(payload.get("label") or "").strip() or "Nueva categoría"
+    default_keyword = label.lower()
     return {
-        "label": str(payload.get("label") or "").strip() or "Nueva categoría",
+        "label": label,
         "youtube_category_id": str(payload.get("youtube_category_id") or "10").strip(),
-        "primary_keywords": list_value("primary_keywords"),
-        "title_phrases": list_value("title_phrases"),
+        "primary_keywords": list_value("primary_keywords") or [default_keyword],
+        "title_phrases": list_value("title_phrases") or [label],
         "music_prompt": str(payload.get("music_prompt") or "").strip(),
-        "image_prompt": str(payload.get("image_prompt") or "").strip(),
-        "audience_value": str(payload.get("audience_value") or "").strip(),
-        "tags": list_value("tags"),
+        "image_prompt": str(payload.get("image_prompt") or "").strip()
+        or "Premium abstract YouTube music background, clean cinematic composition, no text, no logos.",
+        "audience_value": str(payload.get("audience_value") or "").strip() or default_keyword,
+        "tags": list_value("tags") or [safe for safe in re.split(r"[\s_-]+", default_keyword) if safe],
     }
 
 
@@ -695,8 +698,8 @@ def get_custom_categories() -> dict:
 def save_custom_category(body: CategoryBody) -> dict:
     category = _normalize_category(body.category)
     key = _tenant_id(body.category_key or category["label"])
-    if not category["music_prompt"] or not category["image_prompt"]:
-        raise HTTPException(400, "music_prompt and image_prompt are required")
+    if not category["music_prompt"]:
+        raise HTTPException(400, "music_prompt is required")
     custom = _load_custom_categories()
     custom[key] = category
     _save_custom_categories(custom)
