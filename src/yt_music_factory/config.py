@@ -108,6 +108,7 @@ class JobSpec:
     channel_style: ChannelStyleConfig = field(default_factory=ChannelStyleConfig)
     youtube: YoutubeConfig = field(default_factory=YoutubeConfig)
     assets: AssetsConfig = field(default_factory=AssetsConfig)
+    asset_strategy: dict[str, Any] = field(default_factory=dict)
     source_path: Path | None = None
 
 
@@ -140,6 +141,7 @@ def load_spec(path: Path) -> JobSpec:
         channel_style=ChannelStyleConfig(**_section(raw, "channel_style")),
         youtube=YoutubeConfig(**_section(raw, "youtube")),
         assets=AssetsConfig(**_section(raw, "assets")),
+        asset_strategy=_section(raw, "asset_strategy"),
         source_path=path,
     )
     validate_spec(spec)

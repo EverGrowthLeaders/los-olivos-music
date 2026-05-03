@@ -954,6 +954,165 @@
     </section>
 
 
+    <!-- ══════════════════════════════ ASSET STRATEGY ══════════════════════════════ -->
+    <section x-show="tab === 'strategy'">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-xl font-semibold">Asset Strategy</h1>
+          <p class="text-sm text-zinc-500 mt-0.5">Reutilización, extensión interna, validación de repetición y estimación de coste.</p>
+        </div>
+        <button @click="saveAssetStrategy()" :disabled="isSavingStrategy"
+          class="bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          <span x-text="isSavingStrategy ? 'Guardando...' : 'Guardar estrategia'"></span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div class="xl:col-span-2 space-y-4">
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <label class="block">
+                <span class="block text-xs font-medium text-zinc-500 mb-2">Aplicar a</span>
+                <select x-model="strategyScope" @change="loadAssetStrategy()"
+                  class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500">
+                  <option value="channel">Canal actual</option>
+                  <option value="category">Categoría</option>
+                  <option value="global">Global</option>
+                </select>
+              </label>
+              <label class="block md:col-span-2" x-show="strategyScope === 'category'">
+                <span class="block text-xs font-medium text-zinc-500 mb-2">Categoría</span>
+                <select x-model="strategyCategoryKey" @change="loadAssetStrategy()"
+                  class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500">
+                  <template x-for="(cat, key) in categories" :key="key">
+                    <option :value="key" x-text="cat.label"></option>
+                  </template>
+                </select>
+              </label>
+            </div>
+            <label class="block text-xs font-medium text-zinc-500 mb-2">Perfil</label>
+            <select x-model="assetStrategy.profile" @change="applyStrategyProfile(assetStrategy.profile)"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500">
+              <option value="conservative">Conservative</option>
+              <option value="standard">Standard</option>
+              <option value="aggressive">Aggressive</option>
+              <option value="custom">Custom</option>
+            </select>
+            <p x-show="assetStrategy.profile === 'aggressive'" class="text-xs text-amber-400 mt-2">Mayor riesgo de repetición percibida. Usar solo tras validar canal.</p>
+            <label class="block mt-4">
+              <span class="flex justify-between text-xs text-zinc-500 mb-1">
+                <span>Mínimo minutos frescos</span>
+                <span x-text="Math.round(assetStrategy.min_fresh_generated_minutes || 0) + ' min'"></span>
+              </span>
+              <input x-model.number="assetStrategy.min_fresh_generated_minutes" @input="markStrategyCustom(); estimateAssetStrategy()" type="range" min="0" max="60" step="1" class="w-full">
+            </label>
+          </div>
+
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-sm font-semibold">Reutilización entre vídeos</h2>
+              <button @click="assetStrategy.cross_video_reuse.enabled = !assetStrategy.cross_video_reuse.enabled; markStrategyCustom(); estimateAssetStrategy()"
+                class="w-10 h-6 rounded-full relative transition-colors" :class="assetStrategy.cross_video_reuse.enabled ? 'bg-violet-600' : 'bg-zinc-700'">
+                <span class="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="assetStrategy.cross_video_reuse.enabled ? 'translate-x-4' : 'translate-x-0.5'"></span>
+              </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <template x-for="field in reuseFields" :key="field.key">
+                <label class="block">
+                  <span class="flex justify-between text-xs text-zinc-500 mb-1"><span x-text="field.label"></span><span x-text="formatStrategyValue(assetStrategy.cross_video_reuse[field.key], field)"></span></span>
+                  <input x-model.number="assetStrategy.cross_video_reuse[field.key]" @input="markStrategyCustom(); estimateAssetStrategy()" type="range" :min="field.min" :max="field.max" :step="field.step" class="w-full">
+                </label>
+              </template>
+              <label class="block"><span class="text-xs text-zinc-500">Cooldown días</span><input x-model.number="assetStrategy.cross_video_reuse.min_days_before_reuse_same_channel" @input="markStrategyCustom(); estimateAssetStrategy()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label class="block"><span class="text-xs text-zinc-500">Cooldown vídeos</span><input x-model.number="assetStrategy.cross_video_reuse.min_videos_before_reuse_same_channel" @input="markStrategyCustom(); estimateAssetStrategy()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label class="block"><span class="text-xs text-zinc-500">Máx usos canal</span><input x-model.number="assetStrategy.cross_video_reuse.max_uses_same_channel_lifetime" @input="markStrategyCustom(); estimateAssetStrategy()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label class="block"><span class="text-xs text-zinc-500">Máx usos global</span><input x-model.number="assetStrategy.cross_video_reuse.max_uses_global_lifetime" @input="markStrategyCustom(); estimateAssetStrategy()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+            </div>
+          </div>
+
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-sm font-semibold">Ampliación interna</h2>
+              <button @click="assetStrategy.internal_extension.enabled = !assetStrategy.internal_extension.enabled; markStrategyCustom(); estimateAssetStrategy()"
+                class="w-10 h-6 rounded-full relative transition-colors" :class="assetStrategy.internal_extension.enabled ? 'bg-violet-600' : 'bg-zinc-700'">
+                <span class="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="assetStrategy.internal_extension.enabled ? 'translate-x-4' : 'translate-x-0.5'"></span>
+              </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <template x-for="field in extensionFields" :key="field.key">
+                <label class="block">
+                  <span class="flex justify-between text-xs text-zinc-500 mb-1"><span x-text="field.label"></span><span x-text="formatStrategyValue(assetStrategy.internal_extension[field.key], field)"></span></span>
+                  <input x-model.number="assetStrategy.internal_extension[field.key]" @input="markStrategyCustom(); estimateAssetStrategy()" type="range" :min="field.min" :max="field.max" :step="field.step" class="w-full">
+                </label>
+              </template>
+              <label class="block"><span class="text-xs text-zinc-500">Máx clips extendidos</span><input x-model.number="assetStrategy.internal_extension.max_number_of_extended_clips" @input="markStrategyCustom(); estimateAssetStrategy()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label class="flex items-center gap-3 text-sm text-zinc-300"><input x-model="assetStrategy.internal_extension.require_micro_variation" @change="markStrategyCustom(); estimateAssetStrategy()" type="checkbox"> Microvariación requerida</label>
+            </div>
+          </div>
+
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <h2 class="text-sm font-semibold mb-4">Intro/outro, secuencia, posición y gate</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label class="flex items-center gap-3 text-sm text-zinc-300"><input x-model="assetStrategy.intro_outro.first_track_must_be_new" @change="markStrategyCustom()" type="checkbox"> Primer track nuevo</label>
+              <label class="flex items-center gap-3 text-sm text-zinc-300"><input x-model="assetStrategy.intro_outro.second_track_must_be_new" @change="markStrategyCustom()" type="checkbox"> Segundo track nuevo</label>
+              <label class="flex items-center gap-3 text-sm text-zinc-300"><input x-model="assetStrategy.intro_outro.last_track_must_be_new" @change="markStrategyCustom()" type="checkbox"> Último track nuevo</label>
+              <label class="flex items-center gap-3 text-sm text-zinc-300"><input x-model="assetStrategy.sequence.forbid_repeated_ordered_bigrams" @change="markStrategyCustom()" type="checkbox"> Bloquear bigrams repetidos</label>
+              <label class="flex items-center gap-3 text-sm text-zinc-300"><input x-model="assetStrategy.sequence.forbid_repeated_ordered_trigrams" @change="markStrategyCustom()" type="checkbox"> Bloquear trigrams repetidos</label>
+              <label class="flex items-center gap-3 text-sm text-zinc-300"><input x-model="assetStrategy.position.forbid_same_slot_reuse" @change="markStrategyCustom()" type="checkbox"> Bloquear mismo slot</label>
+              <template x-for="field in gateFields" :key="field.path">
+                <label class="block">
+                  <span class="flex justify-between text-xs text-zinc-500 mb-1"><span x-text="field.label"></span><span x-text="pct(getStrategyPath(field.path))"></span></span>
+                  <input :value="getStrategyPath(field.path)" @input="setStrategyPath(field.path, Number($event.target.value)); markStrategyCustom(); estimateAssetStrategy()" type="range" min="0" max="1" step="0.01" class="w-full">
+                </label>
+              </template>
+              <label class="block"><span class="text-xs text-zinc-500">Cooldown slot vecino (días)</span><input x-model.number="assetStrategy.position.forbid_neighbor_slot_reuse_within_days" @input="markStrategyCustom()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label class="block"><span class="text-xs text-zinc-500">Tamaño de slot (seg)</span><input x-model.number="assetStrategy.position.slot_seconds" @input="markStrategyCustom()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label class="block"><span class="text-xs text-zinc-500">Primeros minutos nuevos</span><input x-model.number="assetStrategy.intro_outro.first_minutes_must_be_new" @input="markStrategyCustom()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label class="block"><span class="text-xs text-zinc-500">Últimos minutos nuevos</span><input x-model.number="assetStrategy.intro_outro.last_minutes_must_be_new" @input="markStrategyCustom()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label class="block"><span class="text-xs text-zinc-500">Sin extensión primeros min</span><input x-model.number="assetStrategy.intro_outro.forbid_extension_in_first_minutes" @input="markStrategyCustom()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label class="block"><span class="text-xs text-zinc-500">Sin extensión últimos min</span><input x-model.number="assetStrategy.intro_outro.forbid_extension_in_last_minutes" @input="markStrategyCustom()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+            </div>
+          </div>
+        </div>
+
+        <aside class="space-y-4">
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <h2 class="text-sm font-semibold mb-4">Cost estimator</h2>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <label><span class="text-xs text-zinc-500">Duración min</span><input x-model.number="strategyEstimateForm.target_minutes" @input="estimateAssetStrategy()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label><span class="text-xs text-zinc-500">$/clip</span><input x-model.number="strategyEstimateForm.price_per_generation" @input="estimateAssetStrategy()" type="number" step="0.001" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label><span class="text-xs text-zinc-500">Miniatura $</span><input x-model.number="strategyEstimateForm.thumbnail_price" @input="estimateAssetStrategy()" type="number" step="0.001" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+              <label><span class="text-xs text-zinc-500">Clip min</span><input x-model.number="strategyEstimateForm.clip_minutes" @input="estimateAssetStrategy()" type="number" step="0.1" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
+            </div>
+            <dl class="space-y-2 text-sm">
+              <div class="flex justify-between"><dt class="text-zinc-500">Clips base</dt><dd x-text="assetEstimate.base_clips ?? '-'"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">Clips nuevos</dt><dd x-text="assetEstimate.expected_new_clips ?? '-'"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">Reutilizados</dt><dd x-text="assetEstimate.expected_reused_clips ?? '-'"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">Extendidos</dt><dd x-text="assetEstimate.expected_extended_clips ?? '-'"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">Coste base</dt><dd x-text="'$' + (assetEstimate.base_total_cost ?? 0).toFixed(3)"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">Coste optimizado</dt><dd x-text="'$' + (assetEstimate.optimized_total_cost ?? 0).toFixed(3)"></dd></div>
+              <div class="flex justify-between text-emerald-400"><dt>Ahorro</dt><dd x-text="(assetEstimate.expected_savings_percent ?? 0).toFixed(1) + '%'"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">100 vídeos</dt><dd x-text="'$' + (assetEstimate.cost_per_100_videos ?? 0).toFixed(2)"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">500 vídeos</dt><dd x-text="'$' + (assetEstimate.cost_per_500_videos ?? 0).toFixed(2)"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">1000 vídeos</dt><dd x-text="'$' + (assetEstimate.cost_per_1000_videos ?? 0).toFixed(2)"></dd></div>
+            </dl>
+          </div>
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <h2 class="text-sm font-semibold mb-3">Warnings</h2>
+            <template x-if="(assetEstimate.warnings || []).length === 0">
+              <p class="text-xs text-zinc-600">Sin warnings para esta configuración.</p>
+            </template>
+            <ul class="space-y-2">
+              <template x-for="warning in assetEstimate.warnings || []" :key="warning">
+                <li class="text-xs text-amber-300 bg-amber-950/30 border border-amber-900/50 rounded-lg px-3 py-2" x-text="warning"></li>
+              </template>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+
     <!-- ══════════════════════════════ CONFIGURACIÓN ══════════════════════════════ -->
     <section x-show="tab === 'config'">
 
@@ -1160,6 +1319,7 @@
         { id: 'nuevo',     label: 'Nuevo Video' },
         { id: 'historial', label: 'Historial' },
         { id: 'auto',      label: 'Automatización' },
+        { id: 'strategy',  label: 'Asset Strategy' },
         { id: 'config',    label: 'Configuración' },
       ],
 
@@ -1266,6 +1426,52 @@
         upload: true,
         enabled: true,
       },
+      isSavingStrategy: false,
+      strategyScope: 'channel',
+      strategyCategoryKey: '',
+      assetStrategy: {
+        profile: 'standard',
+        min_fresh_generated_minutes: 30,
+        cross_video_reuse: { enabled: true },
+        internal_extension: { enabled: true },
+        intro_outro: {},
+        sequence: {},
+        position: {},
+        publish_gate: {},
+        eligibility: { reusable_only_if: {}, loopable_only_if: {} },
+        on_gate_fail: { max_retries: 5, actions: [] },
+      },
+      assetEstimate: {},
+      strategyEstimateForm: {
+        target_minutes: 60,
+        clip_minutes: 3,
+        price_per_generation: 0.08,
+        thumbnail_price: 0.134,
+      },
+      reuseFields: [
+        { key: 'target_reuse_ratio', label: 'Reuse objetivo', min: 0, max: 0.6, step: 0.01, kind: 'pct' },
+        { key: 'hard_max_reuse_ratio', label: 'Reuse máximo duro', min: 0, max: 0.7, step: 0.01, kind: 'pct' },
+        { key: 'max_overlap_with_previous_video', label: 'Overlap vídeo anterior', min: 0, max: 0.8, step: 0.01, kind: 'pct' },
+        { key: 'max_overlap_with_any_same_channel_video', label: 'Overlap mismo canal', min: 0, max: 0.8, step: 0.01, kind: 'pct' },
+      ],
+      extensionFields: [
+        { key: 'target_extended_track_ratio', label: 'Extensión objetivo', min: 0, max: 0.7, step: 0.01, kind: 'pct' },
+        { key: 'hard_max_extended_track_ratio', label: 'Extensión máxima dura', min: 0, max: 0.8, step: 0.01, kind: 'pct' },
+        { key: 'preferred_extension_factor', label: 'Factor preferido', min: 1, max: 2, step: 0.01, kind: 'factor' },
+        { key: 'max_extension_factor', label: 'Factor máximo', min: 1, max: 2, step: 0.01, kind: 'factor' },
+        { key: 'preferred_crossfade_seconds', label: 'Crossfade preferido', min: 0, max: 30, step: 1, kind: 'seconds' },
+        { key: 'max_looped_minutes_ratio', label: 'Minutos loopeados máx.', min: 0, max: 0.8, step: 0.01, kind: 'pct' },
+      ],
+      gateFields: [
+        { path: 'sequence.max_longest_common_subsequence_ratio', label: 'LCS máximo' },
+        { path: 'sequence.max_same_position_reuse_ratio', label: 'Misma posición máx.' },
+        { path: 'publish_gate.max_audio_overlap_score', label: 'Gate audio' },
+        { path: 'publish_gate.max_sequence_similarity_score', label: 'Gate secuencia' },
+        { path: 'publish_gate.max_position_similarity_score', label: 'Gate posición' },
+        { path: 'publish_gate.max_metadata_similarity_score', label: 'Gate metadata' },
+        { path: 'publish_gate.max_visual_similarity_score', label: 'Gate visual' },
+        { path: 'publish_gate.max_total_repetition_risk_score', label: 'Gate total' },
+      ],
 
       // ── Init ──
       async init() {
@@ -1278,6 +1484,7 @@
           this.loadRuns(),
           this.loadSchedules(),
           this.loadYoutubeStatus(),
+          this.loadAssetStrategy(),
         ]);
         window.addEventListener('message', (event) => {
           if (event.data?.type === 'youtube-oauth-connected') {
@@ -1385,6 +1592,180 @@
         };
       },
 
+      strategyPreset(profile = 'standard') {
+        const base = {
+          profile: 'standard',
+          min_fresh_generated_minutes: 30,
+          cross_video_reuse: {
+            enabled: true,
+            target_reuse_ratio: 0.30,
+            hard_max_reuse_ratio: 0.40,
+            max_overlap_with_previous_video: 0.20,
+            max_overlap_with_any_same_channel_video: 0.30,
+            max_overlap_with_other_owned_channels: 0.15,
+            min_days_before_reuse_same_channel: 21,
+            min_videos_before_reuse_same_channel: 10,
+            max_uses_same_channel_lifetime: 4,
+            max_uses_global_lifetime: 8,
+            max_uses_global_30_days: 2,
+          },
+          internal_extension: {
+            enabled: true,
+            strategy: 'duplicate_with_crossfade',
+            target_extended_track_ratio: 0.35,
+            hard_max_extended_track_ratio: 0.50,
+            preferred_extension_factor: 1.85,
+            max_extension_factor: 2.0,
+            min_crossfade_seconds: 12,
+            preferred_crossfade_seconds: 18,
+            max_crossfade_seconds: 30,
+            max_extended_duration_seconds: 360,
+            max_number_of_extended_clips: 6,
+            max_looped_minutes_ratio: 0.35,
+            hard_max_looped_minutes_ratio: 0.45,
+            require_micro_variation: true,
+            allow_consecutive_extended_clips: false,
+          },
+          intro_outro: {
+            first_track_must_be_new: true,
+            second_track_must_be_new: true,
+            last_track_must_be_new: true,
+            first_minutes_must_be_new: 6,
+            last_minutes_must_be_new: 3,
+            forbid_extension_in_first_minutes: 6,
+            forbid_extension_in_last_minutes: 3,
+          },
+          sequence: {
+            forbid_repeated_ordered_bigrams: true,
+            forbid_repeated_ordered_trigrams: true,
+            max_longest_common_subsequence_ratio: 0.20,
+            max_same_position_reuse_ratio: 0.10,
+          },
+          position: {
+            enabled: true,
+            slot_seconds: 180,
+            forbid_same_slot_reuse: true,
+            forbid_neighbor_slot_reuse_within_days: 30,
+          },
+          eligibility: {
+            reusable_only_if: {
+              reusable: true,
+              hook_strength_max: 'low',
+              vocal_presence_allowed: false,
+              strong_drop_allowed: false,
+              strong_intro_allowed: false,
+              strong_outro_allowed: false,
+              final_cadence_allowed: false,
+            },
+            loopable_only_if: {
+              loop_safe: true,
+              hook_strength_max: 'low',
+              vocal_presence_allowed: false,
+              strong_drop_allowed: false,
+              strong_intro_allowed: false,
+              strong_outro_allowed: false,
+              final_cadence_allowed: false,
+            },
+          },
+          publish_gate: {
+            max_audio_overlap_score: 0.30,
+            max_sequence_similarity_score: 0.20,
+            max_position_similarity_score: 0.10,
+            max_metadata_similarity_score: 0.55,
+            max_visual_similarity_score: 0.45,
+            max_total_repetition_risk_score: 0.35,
+          },
+          on_gate_fail: {
+            max_retries: 5,
+            actions: ['reshuffle', 'replace_reused_tracks', 'regenerate_missing_tracks', 'change_energy_curve'],
+          },
+        };
+        const overrides = {
+          conservative: {
+            profile: 'conservative',
+            min_fresh_generated_minutes: 36,
+            cross_video_reuse: { target_reuse_ratio: 0.20, hard_max_reuse_ratio: 0.30 },
+            internal_extension: { target_extended_track_ratio: 0.25, hard_max_extended_track_ratio: 0.35, max_looped_minutes_ratio: 0.25, hard_max_looped_minutes_ratio: 0.35 },
+          },
+          standard: { profile: 'standard' },
+          aggressive: {
+            profile: 'aggressive',
+            min_fresh_generated_minutes: 24,
+            cross_video_reuse: { target_reuse_ratio: 0.40, hard_max_reuse_ratio: 0.50 },
+            internal_extension: { target_extended_track_ratio: 0.45, hard_max_extended_track_ratio: 0.60, max_looped_minutes_ratio: 0.45, hard_max_looped_minutes_ratio: 0.55 },
+          },
+        };
+        return this.deepMerge(base, overrides[profile] || overrides.standard);
+      },
+
+      deepMerge(base, override) {
+        const result = Array.isArray(base) ? [...base] : { ...(base || {}) };
+        for (const [key, value] of Object.entries(override || {})) {
+          if (value && typeof value === 'object' && !Array.isArray(value) && result[key] && typeof result[key] === 'object' && !Array.isArray(result[key])) {
+            result[key] = this.deepMerge(result[key], value);
+          } else {
+            result[key] = Array.isArray(value) ? [...value] : value;
+          }
+        }
+        return result;
+      },
+
+      markStrategyCustom() {
+        if (this.assetStrategy?.profile !== 'custom') this.assetStrategy.profile = 'custom';
+      },
+
+      formatStrategyValue(value, field) {
+        if (field.kind === 'pct') return this.pct(value);
+        if (field.kind === 'seconds') return `${Math.round(Number(value || 0))}s`;
+        if (field.kind === 'factor') return `${Number(value || 0).toFixed(2)}x`;
+        return value ?? '';
+      },
+
+      pct(value) {
+        return `${Math.round(Number(value || 0) * 100)}%`;
+      },
+
+      getStrategyPath(path) {
+        return path.split('.').reduce((obj, key) => (obj || {})[key], this.assetStrategy) ?? 0;
+      },
+
+      setStrategyPath(path, value) {
+        const parts = path.split('.');
+        let obj = this.assetStrategy;
+        for (const part of parts.slice(0, -1)) {
+          obj[part] = obj[part] || {};
+          obj = obj[part];
+        }
+        obj[parts[parts.length - 1]] = value;
+      },
+
+      yamlScalar(value) {
+        if (typeof value === 'boolean') return value ? 'true' : 'false';
+        if (typeof value === 'number') return String(value);
+        if (Array.isArray(value)) return `[${value.map(v => JSON.stringify(v)).join(', ')}]`;
+        if (value === null || value === undefined) return 'null';
+        return JSON.stringify(String(value));
+      },
+
+      yamlObjectLines(key, obj, indent = '') {
+        const lines = [`${indent}${key}:`];
+        const walk = (value, depth) => {
+          const nested = [];
+          for (const [childKey, childValue] of Object.entries(value || {})) {
+            const pad = ' '.repeat(depth);
+            if (childValue && typeof childValue === 'object' && !Array.isArray(childValue)) {
+              nested.push(`${pad}${childKey}:`);
+              nested.push(...walk(childValue, depth + 2));
+            } else {
+              nested.push(`${pad}${childKey}: ${this.yamlScalar(childValue)}`);
+            }
+          }
+          return nested;
+        };
+        lines.push(...walk(obj, indent.length + 2));
+        return lines;
+      },
+
       buildMusicPrompt(cat) {
         return this.cleanMultiline(cat.music_prompt || '');
       },
@@ -1440,6 +1821,7 @@
           this.loadRuns(),
           this.loadSchedules(),
           this.loadYoutubeStatus(),
+          this.loadAssetStrategy(),
         ]);
       },
 
@@ -1563,6 +1945,69 @@
         } catch { /* ignore */ }
       },
 
+      async loadAssetStrategy() {
+        try {
+          if (!this.strategyCategoryKey) this.strategyCategoryKey = this.jobForm.category_key || Object.keys(this.categories)[0] || 'focus_lofi';
+          const categoryParam = this.strategyScope === 'category'
+            ? '&category_key=' + encodeURIComponent(this.strategyCategoryKey)
+            : '';
+          const r = await fetch(this.api('/api/asset-strategy') + categoryParam);
+          const data = await r.json();
+          this.assetStrategy = this.deepMerge(this.strategyPreset(data.profile || 'standard'), data);
+        } catch {
+          this.assetStrategy = this.strategyPreset('standard');
+        }
+        await this.estimateAssetStrategy();
+      },
+
+      async applyStrategyProfile(profile) {
+        if (profile === 'custom') {
+          this.assetStrategy.profile = 'custom';
+        } else {
+          this.assetStrategy = this.strategyPreset(profile);
+        }
+        await this.estimateAssetStrategy();
+      },
+
+      async saveAssetStrategy() {
+        this.isSavingStrategy = true;
+        try {
+          const r = await fetch(this.api('/api/asset-strategy'), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              strategy: this.assetStrategy,
+              scope: this.strategyScope,
+              category_key: this.strategyScope === 'category' ? this.strategyCategoryKey : null,
+            }),
+          });
+          if (r.ok) {
+            const data = await r.json();
+            this.assetStrategy = this.deepMerge(this.strategyPreset(data.profile || 'standard'), data);
+            await this.estimateAssetStrategy();
+          }
+        } catch { /* ignore */ }
+        this.isSavingStrategy = false;
+      },
+
+      async estimateAssetStrategy() {
+        if (!this.assetStrategy) return;
+        try {
+          const r = await fetch('/api/asset-strategy/estimate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              strategy: this.assetStrategy,
+              target_minutes: Number(this.strategyEstimateForm.target_minutes || 60),
+              clip_minutes: Number(this.strategyEstimateForm.clip_minutes || 3),
+              price_per_generation: Number(this.strategyEstimateForm.price_per_generation || 0.08),
+              thumbnail_price: Number(this.strategyEstimateForm.thumbnail_price || 0.134),
+            }),
+          });
+          if (r.ok) this.assetEstimate = await r.json();
+        } catch { /* ignore */ }
+      },
+
       schedulePayload(extra = {}) {
         return {
           ...this.scheduleForm,
@@ -1636,6 +2081,8 @@
           `  target_minutes: ${f.target_minutes}`,
           ``,
           `category_key: ${f.category_key}`,
+          ``,
+          ...this.yamlObjectLines('asset_strategy', this.assetStrategy || this.strategyPreset('standard')),
           ``,
           `channel_style:`,
           ...this.yamlBlock('theme', style.theme, '  '),

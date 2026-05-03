@@ -17,6 +17,13 @@ class AudioChapter:
     audio_file: Path
 
 
+@dataclass(slots=True)
+class ExtendedClipResult:
+    path: Path
+    duration_seconds: float
+    filters_used: list[str]
+
+
 def ffprobe_duration(path: Path) -> float:
     require_binary("ffprobe")
     data = run_cmd_json(
@@ -156,6 +163,126 @@ def make_audio_loop(
         str(manifest),
         "-t",
         str(target_seconds),
+        "-vn",
+    ]
+    if normalize_audio:
+        cmd += ["-af", "loudnorm=I=-14:LRA=11:TP=-1.5"]
+    cmd += ["-c:a", "aac", "-b:a", audio_bitrate, "-ar", "44100", str(out_audio)]
+    run_cmd(cmd)
+    return out_audio
+
+
+def extend_clip_with_crossfade(
+    input_path: Path,
+    output_path: Path,
+    target_duration_seconds: int,
+    crossfade_seconds: int,
+    micro_variation: bool,
+) -> ExtendedClipResult:
+    require_binary("ffmpeg")
+    ensure_dir(output_path.parent)
+    duration = ffprobe_duration(input_path)
+    crossfade = max(0, min(int(crossfade_seconds), int(duration) - 1, 30))
+    target = max(1, int(target_duration_seconds))
+    filters_used = [f"acrossfade=d={crossfade}:c1=tri:c2=tri"] if crossfade else ["concat=n=2:v=0:a=1"]
+    second_filter = "anull"
+    if micro_variation:
+        second_filter = "volume=0.966,equalizer=f=4200:t=q:w=1:g=-0.4"
+        filters_used.insert(0, second_filter)
+    if crossfade:
+        filter_complex = f"[1:a]{second_filter}[b];[0:a][b]acrossfade=d={crossfade}:c1=tri:c2=tri[out]"
+    else:
+        filter_complex = f"[1:a]{second_filter}[b];[0:a][b]concat=n=2:v=0:a=1[out]"
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(input_path),
+        "-i",
+        str(input_path),
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        "[out]",
+        "-t",
+        str(target),
+        "-vn",
+        "-ac",
+        "2",
+        "-ar",
+        "44100",
+    ]
+    if output_path.suffix.lower() == ".wav":
+        cmd += ["-c:a", "pcm_s16le"]
+    elif output_path.suffix.lower() == ".mp3":
+        cmd += ["-c:a", "libmp3lame", "-b:a", "256k"]
+    else:
+        cmd += ["-c:a", "aac", "-b:a", "256k"]
+    cmd.append(str(output_path))
+    run_cmd(cmd, quiet=True)
+    return ExtendedClipResult(path=output_path, duration_seconds=ffprobe_duration(output_path), filters_used=filters_used)
+
+
+def make_audio_from_timeline(
+    timeline: list[dict],
+    out_audio: Path,
+    work_dir: Path,
+    *,
+    audio_bitrate: str = "192k",
+    normalize_audio: bool = False,
+) -> Path:
+    require_binary("ffmpeg")
+    ensure_dir(out_audio.parent)
+    segment_dir = ensure_dir(work_dir / "timeline_segments")
+    segments: list[Path] = []
+    for idx, item in enumerate(timeline, start=1):
+        src = Path(item["render_source_file"] if item.get("render_source_file") else item["source_file"])
+        duration = max(1, int(round(float(item["planned_duration_seconds"]))))
+        dst = segment_dir / f"segment_{idx:03d}.wav"
+        if not dst.exists() or dst.stat().st_size == 0:
+            run_cmd(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    str(src),
+                    "-t",
+                    str(duration),
+                    "-vn",
+                    "-ac",
+                    "2",
+                    "-ar",
+                    "44100",
+                    "-c:a",
+                    "pcm_s16le",
+                    str(dst),
+                ],
+                quiet=True,
+            )
+        segments.append(dst)
+    manifest = work_dir / "timeline_audio_concat.ffconcat"
+    manifest.write_text(
+        "\n".join(["ffconcat version 1.0", *[_ffconcat_file_line(path) for path in segments]]) + "\n",
+        encoding="utf-8",
+    )
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(manifest),
         "-vn",
     ]
     if normalize_audio:

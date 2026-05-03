@@ -8,9 +8,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .asset_strategy import estimate_cost, strategy_warnings
 from .config import category_for, load_categories, load_spec
 from .pipeline import run_pipeline
 from .seo import build_metadata
+from .strategy_store import load_effective_strategy, load_strategy_store, set_strategy_profile
 from .utils import require_binary, write_json
 from .youtube import upload_video
 
@@ -45,6 +47,18 @@ def main(argv: list[str] | None = None) -> None:
     serve.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
     serve.add_argument("--port", type=int, default=8080, help="Bind port (default: 8080)")
     serve.add_argument("--reload", action="store_true", help="Auto-reload on code changes")
+
+    strategy = sub.add_parser("strategy", help="Inspect and tune reuse/extension strategy")
+    strategy_sub = strategy.add_subparsers(dest="strategy_command", required=True)
+    strategy_sub.add_parser("show", help="Show current strategy store")
+    set_profile = strategy_sub.add_parser("set-profile", help="Set global strategy profile")
+    set_profile.add_argument("profile", choices=["conservative", "standard", "aggressive"])
+    estimate = strategy_sub.add_parser("estimate", help="Estimate optimized generation cost")
+    estimate.add_argument("spec", type=Path)
+    estimate.add_argument("--price-per-generation", type=float, default=0.08)
+    estimate.add_argument("--thumbnail-price", type=float, default=0.134)
+    validate = strategy_sub.add_parser("validate", help="Validate strategy configuration for a spec")
+    validate.add_argument("spec", type=Path)
 
     args = parser.parse_args(argv)
     if args.command == "render":
@@ -119,6 +133,28 @@ def main(argv: list[str] | None = None) -> None:
             port=args.port,
             reload=args.reload,
         )
+    elif args.command == "strategy":
+        if args.strategy_command == "show":
+            print(json.dumps(load_strategy_store(), indent=2, ensure_ascii=False))
+        elif args.strategy_command == "set-profile":
+            policy = set_strategy_profile(args.profile)
+            print(json.dumps(policy, indent=2, ensure_ascii=False))
+        elif args.strategy_command == "estimate":
+            spec = load_spec(args.spec)
+            policy = load_effective_strategy(category_key=spec.category_key, override=spec.asset_strategy)
+            payload = estimate_cost(
+                policy,
+                target_minutes=spec.job.target_minutes,
+                clip_minutes=max(1, spec.music.track_duration_seconds) / 60,
+                price_per_generation=args.price_per_generation,
+                thumbnail_price=args.thumbnail_price,
+            )
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        elif args.strategy_command == "validate":
+            spec = load_spec(args.spec)
+            policy = load_effective_strategy(category_key=spec.category_key, override=spec.asset_strategy)
+            warnings = strategy_warnings(policy, target_minutes=spec.job.target_minutes)
+            print(json.dumps({"valid": True, "profile": policy.get("profile"), "warnings": warnings}, indent=2, ensure_ascii=False))
 
 
 def doctor_report() -> dict[str, str | bool]:

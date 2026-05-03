@@ -77,6 +77,40 @@ make test
 
 ---
 
+## Reutilización, extensión y control de coste
+
+El pipeline incluye una estrategia configurable para reducir coste sin repetir demasiado el catálogo:
+
+- Reutiliza clips ya generados con límites por canal, uso global, cooldown, slot temporal y solapamiento.
+- Extiende clips internamente con duplicación + crossfade suave de FFmpeg.
+- Valida bigrams, trigrams, LCS, posición y scores de riesgo antes de renderizar/publicar.
+- Guarda un `video_manifest.json` por render.
+- Registra clips en `workdir/data/assets.sqlite`.
+- Exporta clips generados como AAC/M4A o MP3 a 256 kbps y los puede subir a Cloudflare R2.
+
+Comandos útiles:
+
+```bash
+ymf strategy show
+ymf strategy set-profile standard
+ymf strategy estimate examples/production_lofi_1h.yaml
+ymf strategy validate examples/production_lofi_1h.yaml
+```
+
+Variables R2 opcionales:
+
+```bash
+R2_BUCKET=...
+R2_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+YMF_ASSET_AUDIO_FORMAT=aac   # aac | mp3
+```
+
+Más detalle: [`docs/repetition_and_extension.md`](docs/repetition_and_extension.md).
+
+---
+
 ## Render de producción con Lyria 3 Pro + Nano Banana 2
 
 1. Edita `.env`:
@@ -166,6 +200,15 @@ job:
   language: en
   target_minutes: 60
 category_key: focus_lofi
+asset_strategy:
+  profile: standard
+  cross_video_reuse:
+    enabled: true
+    target_reuse_ratio: 0.30
+  internal_extension:
+    enabled: true
+    preferred_extension_factor: 1.85
+    preferred_crossfade_seconds: 18
 music:
   provider: lyria     # local | lyria | assets
   model: lyria-realtime-exp
@@ -237,9 +280,13 @@ docker run --rm -it \
 
 ```text
 src/yt_music_factory/
-  cli.py                  # CLI: render, seo, upload, doctor
+  cli.py                  # CLI: render, seo, upload, doctor, strategy
   pipeline.py             # Orquestación
-  ffmpeg.py               # Concatenación, loop y render bajo CPU
+  ffmpeg.py               # Concatenación, extensión y render bajo CPU
+  asset_registry.py       # Registry SQLite de clips
+  asset_strategy.py       # Presets, warnings y estimador
+  timeline/planner.py     # Planner de reuse/extensión
+  repetition/validators.py # Gate de repetición
   seo.py                  # Metadata SEO local/Gemini
   youtube.py              # Upload resumible con OAuth
   providers/music/        # local, Lyria

@@ -4,6 +4,30 @@ job:
   language: en
   target_minutes: 60
 category_key: focus_lofi
+asset_strategy:
+  profile: standard
+  cross_video_reuse:
+    enabled: true
+    target_reuse_ratio: 0.30
+    hard_max_reuse_ratio: 0.40
+    max_overlap_with_previous_video: 0.20
+    max_overlap_with_any_same_channel_video: 0.30
+    min_days_before_reuse_same_channel: 21
+    min_videos_before_reuse_same_channel: 10
+  internal_extension:
+    enabled: true
+    target_extended_track_ratio: 0.35
+    hard_max_extended_track_ratio: 0.50
+    preferred_extension_factor: 1.85
+    preferred_crossfade_seconds: 18
+    max_number_of_extended_clips: 6
+    require_micro_variation: true
+  intro_outro:
+    first_track_must_be_new: true
+    second_track_must_be_new: true
+    last_track_must_be_new: true
+    first_minutes_must_be_new: 6
+    last_minutes_must_be_new: 3
 music:
   provider: lyria
   model: lyria-realtime-exp

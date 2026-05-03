@@ -36,6 +36,12 @@ SCHEDULES_FILE = Path(
 TENANTS_FILE = Path(
     os.getenv("YMF_TENANTS_FILE", "/app/.secrets/tenants.json" if Path("/app").exists() else str(PROJECT_ROOT / ".secrets" / "tenants.json"))
 )
+ASSET_STRATEGY_FILE = Path(
+    os.getenv(
+        "YMF_ASSET_STRATEGY_FILE",
+        "/app/.secrets/asset_strategy.json" if Path("/app").exists() else str(PROJECT_ROOT / ".secrets" / "asset_strategy.json"),
+    )
+)
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 SCHEDULE_UNITS = {"minutes": 60, "hours": 3600, "days": 86400}
 DEFAULT_SCHEDULE_TIMEZONE = "Europe/Madrid"
@@ -129,6 +135,8 @@ def _merged_env(tenant_id: str | None = DEFAULT_TENANT_ID) -> dict[str, str]:
     env = os.environ.copy()
     env.update(_load_env(tenant_id))
     env["YMF_CUSTOM_CATEGORIES_FILE"] = str(CUSTOM_CATEGORIES_FILE)
+    env["YMF_ASSET_STRATEGY_FILE"] = str(ASSET_STRATEGY_FILE)
+    env["YMF_CHANNEL_ID"] = tenant_id
     if tenant_id != DEFAULT_TENANT_ID and "YOUTUBE_TOKEN_FILE" not in _tenant_env_overrides(tenant_id):
         env["YOUTUBE_TOKEN_FILE"] = str((_tenant_root(tenant_id) / "youtube-token.json").resolve())
     return env
@@ -891,6 +899,70 @@ def update_settings(body: SettingsBody, tenant_id: str = DEFAULT_TENANT_ID) -> d
 
 class ScheduleBody(BaseModel):
     schedule: dict
+
+
+class AssetStrategyBody(BaseModel):
+    strategy: dict
+    scope: str = "channel"
+    category_key: str | None = None
+
+
+class AssetStrategyEstimateBody(BaseModel):
+    strategy: dict
+    target_minutes: float = 60
+    clip_minutes: float = 3
+    price_per_generation: float = 0.08
+    thumbnail_price: float = 0.134
+
+
+@app.get("/api/asset-strategy")
+def get_asset_strategy(tenant_id: str = DEFAULT_TENANT_ID, category_key: str | None = None) -> dict:
+    from yt_music_factory.strategy_store import load_effective_strategy
+
+    tenant_id = _ensure_tenant(tenant_id)
+    return load_effective_strategy(path=ASSET_STRATEGY_FILE, channel_id=tenant_id, category_key=category_key)
+
+
+@app.put("/api/asset-strategy")
+def update_asset_strategy(body: AssetStrategyBody, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    from yt_music_factory.asset_strategy import resolve_asset_strategy
+    from yt_music_factory.strategy_store import load_strategy_store, save_strategy_store
+
+    tenant_id = _ensure_tenant(tenant_id)
+    store = load_strategy_store(ASSET_STRATEGY_FILE)
+    strategy = resolve_asset_strategy(body.strategy)
+    if body.scope == "global":
+        store["global"] = strategy
+    elif body.scope == "category" and body.category_key:
+        store.setdefault("categories", {})[body.category_key] = strategy
+    else:
+        store.setdefault("channels", {})[tenant_id] = strategy
+    save_strategy_store(store, ASSET_STRATEGY_FILE)
+    return strategy
+
+
+@app.post("/api/asset-strategy/estimate")
+def estimate_asset_strategy(body: AssetStrategyEstimateBody) -> dict:
+    from yt_music_factory.asset_strategy import estimate_cost
+
+    return estimate_cost(
+        body.strategy,
+        target_minutes=body.target_minutes,
+        clip_minutes=body.clip_minutes,
+        price_per_generation=body.price_per_generation,
+        thumbnail_price=body.thumbnail_price,
+    )
+
+
+@app.post("/api/asset-strategy/validate")
+def validate_asset_strategy(body: AssetStrategyEstimateBody) -> dict:
+    from yt_music_factory.asset_strategy import resolve_asset_strategy
+    from yt_music_factory.repetition.validators import validate_publish_gate
+
+    policy = resolve_asset_strategy(body.strategy)
+    manifest = {"timeline": [], "job_id": "dry-run", "channel_id": "dry-run"}
+    gate = validate_publish_gate(manifest, policy, [])
+    return {"valid": gate["passed"], **gate}
 
 
 @app.get("/api/schedules")
