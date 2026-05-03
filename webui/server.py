@@ -24,6 +24,12 @@ from pydantic import BaseModel
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CATEGORIES_FILE = PROJECT_ROOT / "config" / "categories.yaml"
 ENV_FILE = Path(os.getenv("YMF_ENV_FILE", "/app/.secrets/.env" if Path("/app").exists() else str(PROJECT_ROOT / ".env")))
+CUSTOM_CATEGORIES_FILE = Path(
+    os.getenv(
+        "YMF_CUSTOM_CATEGORIES_FILE",
+        "/app/.secrets/categories.custom.yaml" if Path("/app").exists() else str(PROJECT_ROOT / ".secrets" / "categories.custom.yaml"),
+    )
+)
 SCHEDULES_FILE = Path(
     os.getenv("YMF_SCHEDULES_FILE", "/app/.secrets/schedules.json" if Path("/app").exists() else str(PROJECT_ROOT / ".secrets" / "schedules.json"))
 )
@@ -53,7 +59,6 @@ SETTING_KEYS = [
     "CHANNEL_VISUAL_STYLE",
     "CHANNEL_THUMBNAIL_STYLE",
     "CHANNEL_COLOR_PALETTE",
-    "CHANNEL_SONIC_IDENTITY",
     "CHANNEL_AVOID",
 ]
 
@@ -312,10 +317,29 @@ def _youtube_client_config(env: dict[str, str], redirect_uri: str) -> dict | Non
 
 
 def _load_categories() -> dict:
-    if not CATEGORIES_FILE.exists():
+    categories: dict = {}
+    if CATEGORIES_FILE.exists():
+        with open(CATEGORIES_FILE, encoding="utf-8") as f:
+            categories.update(yaml.safe_load(f) or {})
+    if CUSTOM_CATEGORIES_FILE.exists():
+        with open(CUSTOM_CATEGORIES_FILE, encoding="utf-8") as f:
+            custom = yaml.safe_load(f) or {}
+            if isinstance(custom, dict):
+                categories.update(custom)
+    return categories
+
+
+def _load_custom_categories() -> dict:
+    if not CUSTOM_CATEGORIES_FILE.exists():
         return {}
-    with open(CATEGORIES_FILE, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    with open(CUSTOM_CATEGORIES_FILE, encoding="utf-8") as f:
+        payload = yaml.safe_load(f) or {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_custom_categories(categories: dict) -> None:
+    CUSTOM_CATEGORIES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CUSTOM_CATEGORIES_FILE.write_text(yaml.safe_dump(categories, sort_keys=True, allow_unicode=True), encoding="utf-8")
 
 
 def _load_tenants() -> list[dict]:
@@ -426,7 +450,6 @@ def _channel_style_from_env(env: dict[str, str]) -> dict[str, str]:
         "visual_style": env.get("CHANNEL_VISUAL_STYLE", ""),
         "thumbnail_style": env.get("CHANNEL_THUMBNAIL_STYLE", ""),
         "color_palette": env.get("CHANNEL_COLOR_PALETTE", ""),
-        "sonic_identity": env.get("CHANNEL_SONIC_IDENTITY", ""),
         "avoid": env.get("CHANNEL_AVOID", ""),
     }
 
@@ -633,9 +656,62 @@ def health() -> dict:
 
 @app.get("/api/categories")
 def get_categories() -> dict:
-    if not CATEGORIES_FILE.exists():
-        raise HTTPException(404, "categories.yaml not found")
-    return _load_categories()
+    categories = _load_categories()
+    if not categories:
+        raise HTTPException(404, "No categories found")
+    return categories
+
+
+class CategoryBody(BaseModel):
+    category_key: str | None = None
+    category: dict
+
+
+def _normalize_category(payload: dict) -> dict:
+    def list_value(key: str) -> list[str]:
+        value = payload.get(key) or []
+        if isinstance(value, str):
+            value = [item.strip() for item in re.split(r"[,\n]", value) if item.strip()]
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    return {
+        "label": str(payload.get("label") or "").strip() or "Nueva categoría",
+        "youtube_category_id": str(payload.get("youtube_category_id") or "10").strip(),
+        "primary_keywords": list_value("primary_keywords"),
+        "title_phrases": list_value("title_phrases"),
+        "music_prompt": str(payload.get("music_prompt") or "").strip(),
+        "image_prompt": str(payload.get("image_prompt") or "").strip(),
+        "audience_value": str(payload.get("audience_value") or "").strip(),
+        "tags": list_value("tags"),
+    }
+
+
+@app.get("/api/custom-categories")
+def get_custom_categories() -> dict:
+    return _load_custom_categories()
+
+
+@app.post("/api/custom-categories")
+def save_custom_category(body: CategoryBody) -> dict:
+    category = _normalize_category(body.category)
+    key = _tenant_id(body.category_key or category["label"])
+    if not category["music_prompt"] or not category["image_prompt"]:
+        raise HTTPException(400, "music_prompt and image_prompt are required")
+    custom = _load_custom_categories()
+    custom[key] = category
+    _save_custom_categories(custom)
+    return {"key": key, "category": category}
+
+
+@app.delete("/api/custom-categories/{category_key}")
+def delete_custom_category(category_key: str) -> dict:
+    key = _tenant_id(category_key)
+    custom = _load_custom_categories()
+    if key not in custom:
+        raise HTTPException(404, f"Custom category '{key}' not found")
+    custom.pop(key)
+    _save_custom_categories(custom)
+    return {"status": "deleted"}
 
 
 class TenantBody(BaseModel):

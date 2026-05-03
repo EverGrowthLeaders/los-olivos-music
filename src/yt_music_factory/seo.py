@@ -253,7 +253,6 @@ def build_gemini_metadata(
             "visual_style": spec.channel_style.visual_style,
             "thumbnail_style": spec.channel_style.thumbnail_style,
             "color_palette": spec.channel_style.color_palette,
-            "sonic_identity": spec.channel_style.sonic_identity,
             "avoid": spec.channel_style.avoid,
         },
     }

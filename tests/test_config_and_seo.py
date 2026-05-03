@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from yt_music_factory.config import category_for, load_categories, load_spec
+from yt_music_factory.config import ChannelStyleConfig, category_for, channel_style_prompt, load_categories, load_spec
 from yt_music_factory.seo import VideoChapter, _with_chapters, build_local_metadata
 
 
@@ -68,4 +68,13 @@ Chapters:
 
     assert result.count("00:00 Track 01") == 1
     assert result.count("Chapters:") == 1
-    assert "#lofi #focus" in result
+
+
+def test_account_style_no_longer_adds_global_music_direction():
+    prompt = channel_style_prompt(
+        ChannelStyleConfig(theme="Focus channel", aesthetic="Premium calm"),
+        media="music",
+    )
+
+    assert "Focus channel" in prompt
+    assert "Sonic identity" not in prompt

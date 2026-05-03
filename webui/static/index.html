@@ -1004,12 +1004,6 @@
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-medium text-zinc-500 mb-1.5">Identidad sonora</label>
-              <textarea x-model="settingsForm.CHANNEL_SONIC_IDENTITY" rows="3"
-                placeholder="Ej: ambient electrónico cálido, pulso sutil, bajos controlados, cero melodías intrusivas..."
-                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
-            </div>
-            <div>
               <label class="block text-xs font-medium text-zinc-500 mb-1.5">Paleta de color</label>
               <input x-model="settingsForm.CHANNEL_COLOR_PALETTE" type="text"
                 placeholder="negro grafito, verde terminal, blanco humo, acentos dorados"
@@ -1021,6 +1015,95 @@
                 placeholder="texto en imagen, logos, caras, estética infantil, colores chillones"
                 class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom categories -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-3">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded bg-cyan-900/50 flex items-center justify-center text-cyan-300 text-xs font-bold">C</div>
+            <div>
+              <h2 class="text-sm font-semibold">Categorías</h2>
+              <p class="text-xs text-zinc-600 mt-0.5">Aquí vive el sonido de cada tipo de vídeo.</p>
+            </div>
+          </div>
+          <button @click="resetCategoryForm()"
+            class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+            Nueva
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Clave</label>
+            <input x-model="categoryForm.key" type="text" placeholder="deep_trading"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Nombre</label>
+            <input x-model="categoryForm.label" type="text" placeholder="Deep Trading"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Audiencia / uso</label>
+            <input x-model="categoryForm.audience_value" type="text" placeholder="trading, análisis, sesiones de mercado..."
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Prompt musical</label>
+            <textarea x-model="categoryForm.music_prompt" rows="4"
+              placeholder="Describe tempo, instrumentos, energía, textura, voces/no voces, continuidad..."
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Prompt visual</label>
+            <textarea x-model="categoryForm.image_prompt" rows="4"
+              placeholder="Describe el fondo, escena, composición, iluminación, estética y elementos prohibidos..."
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Keywords</label>
+            <input x-model="categoryForm.primary_keywords" type="text" placeholder="focus music, trading music"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Frases de título</label>
+            <input x-model="categoryForm.title_phrases" type="text" placeholder="Deep Focus Mix, Market Focus Beats"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Tags</label>
+            <input x-model="categoryForm.tags" type="text" placeholder="lofi, focus, tradingmusic"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 border-t border-zinc-800 pt-4">
+          <div class="flex flex-wrap gap-2">
+            <template x-for="(cat, key) in customCategories" :key="key">
+              <button @click="editCategory(key, cat)"
+                class="bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 px-3 py-1.5 rounded-lg text-xs transition-colors">
+                <span x-text="cat.label || key"></span>
+              </button>
+            </template>
+          </div>
+          <div class="flex items-center gap-2">
+            <button @click="deleteCustomCategory()" x-show="customCategories[categoryForm.key]"
+              class="bg-red-950/60 hover:bg-red-900/70 text-red-300 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+              Borrar
+            </button>
+            <button @click="saveCustomCategory()" :disabled="isSavingCategory"
+              class="bg-cyan-700 hover:bg-cyan-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2 rounded-lg text-xs font-medium transition-colors">
+              <span x-text="isSavingCategory ? 'Guardando...' : 'Guardar categoría'"></span>
+            </button>
           </div>
         </div>
       </div>
@@ -1139,6 +1222,7 @@
       activeTenantId: localStorage.getItem('ymf_active_tenant') || 'default',
       tenantFormName: '',
       categories: {},
+      customCategories: {},
       settings:   {},
       runs:       [],
       schedules:  [],
@@ -1214,6 +1298,17 @@
       settingsSaved: false,
       isSaving: false,
       isSavingSchedule: false,
+      isSavingCategory: false,
+      categoryForm: {
+        key: '',
+        label: '',
+        audience_value: '',
+        music_prompt: '',
+        image_prompt: '',
+        primary_keywords: '',
+        title_phrases: '',
+        tags: '',
+      },
       scheduleForm: {
         name: '',
         category_key: 'focus_lofi',
@@ -1237,6 +1332,7 @@
         await Promise.all([
           this.loadHealth(),
           this.loadCategories(),
+          this.loadCustomCategories(),
           this.loadSettings(),
           this.loadRuns(),
           this.loadSchedules(),
@@ -1343,7 +1439,6 @@
           visual_style:   this.cleanMultiline(form.CHANNEL_VISUAL_STYLE),
           thumbnail_style:this.cleanMultiline(form.CHANNEL_THUMBNAIL_STYLE),
           color_palette:  this.cleanMultiline(form.CHANNEL_COLOR_PALETTE),
-          sonic_identity: this.cleanMultiline(form.CHANNEL_SONIC_IDENTITY),
           avoid:          this.cleanMultiline(form.CHANNEL_AVOID),
         };
       },
@@ -1420,6 +1515,80 @@
         try {
           const r = await fetch('/api/categories');
           this.categories = await r.json();
+        } catch { /* ignore */ }
+      },
+
+      async loadCustomCategories() {
+        try {
+          const r = await fetch('/api/custom-categories');
+          this.customCategories = await r.json();
+        } catch { this.customCategories = {}; }
+      },
+
+      categoryPayload() {
+        return {
+          label: this.categoryForm.label,
+          audience_value: this.categoryForm.audience_value,
+          music_prompt: this.categoryForm.music_prompt,
+          image_prompt: this.categoryForm.image_prompt,
+          primary_keywords: this.splitList(this.categoryForm.primary_keywords),
+          title_phrases: this.splitList(this.categoryForm.title_phrases),
+          tags: this.splitList(this.categoryForm.tags),
+          youtube_category_id: '10',
+        };
+      },
+
+      resetCategoryForm() {
+        this.categoryForm = {
+          key: '',
+          label: '',
+          audience_value: '',
+          music_prompt: '',
+          image_prompt: '',
+          primary_keywords: '',
+          title_phrases: '',
+          tags: '',
+        };
+      },
+
+      editCategory(key, cat) {
+        this.categoryForm = {
+          key,
+          label: cat.label || '',
+          audience_value: cat.audience_value || '',
+          music_prompt: cat.music_prompt || '',
+          image_prompt: cat.image_prompt || '',
+          primary_keywords: (cat.primary_keywords || []).join(', '),
+          title_phrases: (cat.title_phrases || []).join(', '),
+          tags: (cat.tags || []).join(', '),
+        };
+      },
+
+      async saveCustomCategory() {
+        this.isSavingCategory = true;
+        try {
+          const r = await fetch('/api/custom-categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              category_key: this.categoryForm.key,
+              category: this.categoryPayload(),
+            }),
+          });
+          if (!r.ok) throw new Error('No se pudo guardar la categoría');
+          const saved = await r.json();
+          await Promise.all([this.loadCategories(), this.loadCustomCategories()]);
+          this.categoryForm.key = saved.key;
+        } catch { /* ignore */ }
+        this.isSavingCategory = false;
+      },
+
+      async deleteCustomCategory() {
+        if (!this.categoryForm.key) return;
+        try {
+          await fetch('/api/custom-categories/' + encodeURIComponent(this.categoryForm.key), { method: 'DELETE' });
+          this.resetCategoryForm();
+          await Promise.all([this.loadCategories(), this.loadCustomCategories()]);
         } catch { /* ignore */ }
       },
 
@@ -1544,7 +1713,6 @@
           ...this.yamlBlock('visual_style', style.visual_style, '  '),
           ...this.yamlBlock('thumbnail_style', style.thumbnail_style, '  '),
           ...this.yamlBlock('color_palette', style.color_palette, '  '),
-          ...this.yamlBlock('sonic_identity', style.sonic_identity, '  '),
           ...this.yamlBlock('avoid', style.avoid, '  '),
           ``,
           `music:`,
