@@ -21,7 +21,7 @@ def _track(idx: int, *, reused: bool = False, slot_entries=None) -> dict:
 def _policy_without_extension():
     policy = strategy_preset("standard")
     policy["internal_extension"]["enabled"] = False
-    policy["min_fresh_generated_minutes"] = 6
+    policy["min_fresh_generated_ratio"] = 0.20
     policy["intro_outro"]["first_minutes_must_be_new"] = 6
     policy["intro_outro"]["last_minutes_must_be_new"] = 3
     return policy
@@ -67,7 +67,7 @@ def test_planner_respects_reuse_ratio_approximately():
 def test_planner_extends_without_consecutive_extended_clips():
     policy = strategy_preset("standard")
     policy["cross_video_reuse"]["enabled"] = False
-    policy["min_fresh_generated_minutes"] = 0
+    policy["min_fresh_generated_ratio"] = 0
     policy["intro_outro"]["first_minutes_must_be_new"] = 0
     policy["intro_outro"]["last_minutes_must_be_new"] = 0
     manifest = plan_timeline(
@@ -89,7 +89,7 @@ def test_planner_extends_without_consecutive_extended_clips():
 
 def test_planner_rejects_repeated_bigrams_and_trigrams():
     policy = _policy_without_extension()
-    policy["min_fresh_generated_minutes"] = 0
+    policy["min_fresh_generated_ratio"] = 0
     policy["intro_outro"]["first_minutes_must_be_new"] = 0
     policy["intro_outro"]["last_minutes_must_be_new"] = 0
     policy["intro_outro"]["second_track_must_be_new"] = False

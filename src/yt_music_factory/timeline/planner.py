@@ -56,7 +56,7 @@ def estimate_new_track_count(
         available_reusable_count,
         int(total_blocks * ratio(reuse.get("target_reuse_ratio"))) if reuse.get("enabled") else 0,
     )
-    min_fresh_seconds = min(target_seconds, int(ratio(policy.get("min_fresh_generated_minutes"), 0) * 60))
+    min_fresh_seconds = _min_fresh_seconds(policy, target_seconds)
     min_fresh_tracks = ceil(min_fresh_seconds / max(1, source_track_seconds))
     return max(1, min_fresh_tracks, total_blocks - target_reused)
 
@@ -89,7 +89,7 @@ def plan_timeline(
     max_looped_ratio = ratio(extension_policy.get("max_looped_minutes_ratio"))
     target_reuse_ratio = ratio(reuse_policy.get("target_reuse_ratio")) if reuse_policy.get("enabled") else 0.0
     hard_max_reuse_ratio = ratio(reuse_policy.get("hard_max_reuse_ratio"), 1.0)
-    min_fresh_seconds = min(target_seconds, int(ratio(policy.get("min_fresh_generated_minutes"), 0) * 60))
+    min_fresh_seconds = _min_fresh_seconds(policy, target_seconds)
 
     historical_sequences = [[str(item.get("track_id")) for item in video.get("timeline", [])] for video in history]
     historical_bigrams = set().union(*(calculate_ordered_bigrams(sequence) for sequence in historical_sequences)) if historical_sequences else set()
@@ -204,7 +204,7 @@ def plan_timeline(
         elapsed += planned_duration
 
         if fresh_seconds < min_fresh_seconds and not new_queue and elapsed < target_seconds:
-            rejected.append({"reason": "min_fresh_generated_minutes_at_risk", "fresh_seconds": fresh_seconds})
+            rejected.append({"reason": "min_fresh_generated_ratio_at_risk", "fresh_seconds": fresh_seconds})
 
     manifest = {
         "job_id": job_id,
@@ -284,6 +284,12 @@ def _pop_candidate(
         queue.pop(idx)
         return track
     return None
+
+
+def _min_fresh_seconds(policy: dict[str, Any], target_seconds: int) -> int:
+    if "min_fresh_generated_ratio" in policy:
+        return min(target_seconds, int(target_seconds * ratio(policy.get("min_fresh_generated_ratio"), 0.0)))
+    return min(target_seconds, int(ratio(policy.get("min_fresh_generated_minutes"), 0.0) * 60))
 
 
 def _apply_overlap_gates(

@@ -9,7 +9,6 @@ asset_strategy:
   cross_video_reuse:
     enabled: true
     target_reuse_ratio: 0.30
-    hard_max_reuse_ratio: 0.40
     max_overlap_with_previous_video: 0.20
     max_overlap_with_any_same_channel_video: 0.30
     min_days_before_reuse_same_channel: 21

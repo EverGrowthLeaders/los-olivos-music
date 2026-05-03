@@ -8,11 +8,9 @@ from typing import Any
 def _base_policy() -> dict[str, Any]:
     return {
         "profile": "standard",
-        "min_fresh_generated_minutes": 30,
         "cross_video_reuse": {
             "enabled": True,
             "target_reuse_ratio": 0.30,
-            "hard_max_reuse_ratio": 0.40,
             "max_overlap_with_previous_video": 0.20,
             "max_overlap_with_any_same_channel_video": 0.30,
             "max_overlap_with_other_owned_channels": 0.15,
@@ -98,10 +96,8 @@ def _base_policy() -> dict[str, Any]:
 PROFILE_OVERRIDES: dict[str, dict[str, Any]] = {
     "conservative": {
         "profile": "conservative",
-        "min_fresh_generated_minutes": 36,
         "cross_video_reuse": {
             "target_reuse_ratio": 0.20,
-            "hard_max_reuse_ratio": 0.30,
         },
         "internal_extension": {
             "target_extended_track_ratio": 0.25,
@@ -112,10 +108,8 @@ PROFILE_OVERRIDES: dict[str, dict[str, Any]] = {
     },
     "standard": {
         "profile": "standard",
-        "min_fresh_generated_minutes": 30,
         "cross_video_reuse": {
             "target_reuse_ratio": 0.30,
-            "hard_max_reuse_ratio": 0.40,
         },
         "internal_extension": {
             "target_extended_track_ratio": 0.35,
@@ -126,10 +120,8 @@ PROFILE_OVERRIDES: dict[str, dict[str, Any]] = {
     },
     "aggressive": {
         "profile": "aggressive",
-        "min_fresh_generated_minutes": 24,
         "cross_video_reuse": {
             "target_reuse_ratio": 0.40,
-            "hard_max_reuse_ratio": 0.50,
         },
         "internal_extension": {
             "target_extended_track_ratio": 0.45,
@@ -163,6 +155,14 @@ def resolve_asset_strategy(raw: dict[str, Any] | None = None) -> dict[str, Any]:
     profile = str(raw.get("profile") or "standard").lower()
     base = strategy_preset(profile if profile in PROFILE_OVERRIDES else "standard")
     resolved = deep_merge(base, raw)
+    if "min_fresh_generated_ratio" not in raw and "min_fresh_generated_minutes" in raw:
+        resolved["min_fresh_generated_ratio"] = ratio(raw.get("min_fresh_generated_minutes"), 30) / 60
+    elif "min_fresh_generated_ratio" not in raw:
+        reuse_ratio = ratio(resolved.get("cross_video_reuse", {}).get("target_reuse_ratio"), 0.0)
+        resolved["min_fresh_generated_ratio"] = max(0.0, min(1.0, 1.0 - reuse_ratio))
+    reuse = resolved.setdefault("cross_video_reuse", {})
+    if "hard_max_reuse_ratio" not in reuse:
+        reuse["hard_max_reuse_ratio"] = reuse.get("target_reuse_ratio", 0.0)
     if profile == "custom":
         resolved["profile"] = "custom"
     return resolved
@@ -178,7 +178,7 @@ def ratio(value: Any, default: float = 0.0) -> float:
 def strategy_warnings(policy: dict[str, Any], *, target_minutes: float = 60.0) -> list[str]:
     reuse = ratio(policy["cross_video_reuse"].get("target_reuse_ratio"))
     extension = ratio(policy["internal_extension"].get("target_extended_track_ratio"))
-    fresh_minutes = ratio(policy.get("min_fresh_generated_minutes"), 30)
+    fresh_ratio = ratio(policy.get("min_fresh_generated_ratio"), 0.50)
     overlap = ratio(policy["cross_video_reuse"].get("max_overlap_with_any_same_channel_video"))
     warnings: list[str] = []
     if policy.get("profile") == "aggressive":
@@ -187,7 +187,7 @@ def strategy_warnings(policy: dict[str, Any], *, target_minutes: float = 60.0) -
         warnings.append("Reutilización por encima del 40%: riesgo medio/alto.")
     if extension > 0.50:
         warnings.append("Extensión interna por encima del 50%: riesgo medio/alto.")
-    if fresh_minutes < min(30, target_minutes):
+    if fresh_ratio * target_minutes < min(30, target_minutes):
         warnings.append("Menos de 30 minutos frescos en vídeo de 60 min: riesgo de repetición percibida.")
     if overlap > 0.35:
         warnings.append("Solapamiento por canal superior a 35%: el catálogo puede parecer demasiado parecido.")

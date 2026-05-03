@@ -999,13 +999,6 @@
               <option value="custom">Custom</option>
             </select>
             <p x-show="assetStrategy.profile === 'aggressive'" class="text-xs text-amber-400 mt-2">Mayor riesgo de repetición percibida. Usar solo tras validar canal.</p>
-            <label class="block mt-4">
-              <span class="flex justify-between text-xs text-zinc-500 mb-1">
-                <span>Mínimo minutos frescos</span>
-                <span x-text="Math.round(assetStrategy.min_fresh_generated_minutes || 0) + ' min'"></span>
-              </span>
-              <input x-model.number="assetStrategy.min_fresh_generated_minutes" @input="markStrategyCustom(); estimateAssetStrategy()" type="range" min="0" max="60" step="1" class="w-full">
-            </label>
           </div>
 
           <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
@@ -1020,9 +1013,13 @@
               <template x-for="field in reuseFields" :key="field.key">
                 <label class="block">
                   <span class="flex justify-between text-xs text-zinc-500 mb-1"><span x-text="field.label"></span><span x-text="formatStrategyValue(assetStrategy.cross_video_reuse[field.key], field)"></span></span>
-                  <input x-model.number="assetStrategy.cross_video_reuse[field.key]" @input="markStrategyCustom(); estimateAssetStrategy()" type="range" :min="field.min" :max="field.max" :step="field.step" class="w-full">
+                  <input x-model.number="assetStrategy.cross_video_reuse[field.key]" @input="syncFreshFromReuse(); markStrategyCustom(); estimateAssetStrategy()" type="range" :min="field.min" :max="field.max" :step="field.step" class="w-full">
                 </label>
               </template>
+              <div class="md:col-span-2 text-xs text-zinc-600 bg-zinc-950/70 border border-zinc-800 rounded-lg px-3 py-2">
+                <span>Material fresco estimado: </span>
+                <span class="text-zinc-300 font-medium" x-text="pct(1 - (assetStrategy.cross_video_reuse.target_reuse_ratio || 0))"></span>
+              </div>
               <label class="block"><span class="text-xs text-zinc-500">Cooldown días</span><input x-model.number="assetStrategy.cross_video_reuse.min_days_before_reuse_same_channel" @input="markStrategyCustom(); estimateAssetStrategy()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
               <label class="block"><span class="text-xs text-zinc-500">Cooldown vídeos</span><input x-model.number="assetStrategy.cross_video_reuse.min_videos_before_reuse_same_channel" @input="markStrategyCustom(); estimateAssetStrategy()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
               <label class="block"><span class="text-xs text-zinc-500">Máx usos canal</span><input x-model.number="assetStrategy.cross_video_reuse.max_uses_same_channel_lifetime" @input="markStrategyCustom(); estimateAssetStrategy()" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white"></label>
@@ -1431,7 +1428,6 @@
       strategyCategoryKey: '',
       assetStrategy: {
         profile: 'standard',
-        min_fresh_generated_minutes: 30,
         cross_video_reuse: { enabled: true },
         internal_extension: { enabled: true },
         intro_outro: {},
@@ -1450,7 +1446,6 @@
       },
       reuseFields: [
         { key: 'target_reuse_ratio', label: 'Reuse objetivo', min: 0, max: 0.6, step: 0.01, kind: 'pct' },
-        { key: 'hard_max_reuse_ratio', label: 'Reuse máximo duro', min: 0, max: 0.7, step: 0.01, kind: 'pct' },
         { key: 'max_overlap_with_previous_video', label: 'Overlap vídeo anterior', min: 0, max: 0.8, step: 0.01, kind: 'pct' },
         { key: 'max_overlap_with_any_same_channel_video', label: 'Overlap mismo canal', min: 0, max: 0.8, step: 0.01, kind: 'pct' },
       ],
@@ -1595,11 +1590,9 @@
       strategyPreset(profile = 'standard') {
         const base = {
           profile: 'standard',
-          min_fresh_generated_minutes: 30,
           cross_video_reuse: {
             enabled: true,
             target_reuse_ratio: 0.30,
-            hard_max_reuse_ratio: 0.40,
             max_overlap_with_previous_video: 0.20,
             max_overlap_with_any_same_channel_video: 0.30,
             max_overlap_with_other_owned_channels: 0.15,
@@ -1683,15 +1676,13 @@
         const overrides = {
           conservative: {
             profile: 'conservative',
-            min_fresh_generated_minutes: 36,
-            cross_video_reuse: { target_reuse_ratio: 0.20, hard_max_reuse_ratio: 0.30 },
+            cross_video_reuse: { target_reuse_ratio: 0.20 },
             internal_extension: { target_extended_track_ratio: 0.25, hard_max_extended_track_ratio: 0.35, max_looped_minutes_ratio: 0.25, hard_max_looped_minutes_ratio: 0.35 },
           },
           standard: { profile: 'standard' },
           aggressive: {
             profile: 'aggressive',
-            min_fresh_generated_minutes: 24,
-            cross_video_reuse: { target_reuse_ratio: 0.40, hard_max_reuse_ratio: 0.50 },
+            cross_video_reuse: { target_reuse_ratio: 0.40 },
             internal_extension: { target_extended_track_ratio: 0.45, hard_max_extended_track_ratio: 0.60, max_looped_minutes_ratio: 0.45, hard_max_looped_minutes_ratio: 0.55 },
           },
         };
@@ -1712,6 +1703,12 @@
 
       markStrategyCustom() {
         if (this.assetStrategy?.profile !== 'custom') this.assetStrategy.profile = 'custom';
+      },
+
+      syncFreshFromReuse() {
+        const reuse = Number(this.assetStrategy?.cross_video_reuse?.target_reuse_ratio || 0);
+        this.assetStrategy.min_fresh_generated_ratio = Math.max(0, Math.min(1, 1 - reuse));
+        this.assetStrategy.cross_video_reuse.hard_max_reuse_ratio = reuse;
       },
 
       formatStrategyValue(value, field) {
@@ -1966,6 +1963,7 @@
         } else {
           this.assetStrategy = this.strategyPreset(profile);
         }
+        this.syncFreshFromReuse();
         await this.estimateAssetStrategy();
       },
 

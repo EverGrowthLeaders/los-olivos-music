@@ -53,7 +53,7 @@ Si cualquier score supera su threshold, el vídeo se rechaza antes de renderizar
 - Reuse máximo: 30%
 - Extensión objetivo: 25%
 - Extensión máxima: 35%
-- Mínimo fresco por vídeo de 60 min: 36 min
+- Mínimo fresco: 60%
 
 **Standard**
 
@@ -61,7 +61,7 @@ Si cualquier score supera su threshold, el vídeo se rechaza antes de renderizar
 - Reuse máximo: 40%
 - Extensión objetivo: 35%
 - Extensión máxima: 50%
-- Mínimo fresco por vídeo de 60 min: 30 min
+- Mínimo fresco: 50%
 
 **Aggressive**
 
@@ -69,7 +69,7 @@ Si cualquier score supera su threshold, el vídeo se rechaza antes de renderizar
 - Reuse máximo: 50%
 - Extensión objetivo: 45%
 - Extensión máxima: 60%
-- Mínimo fresco por vídeo de 60 min: 24 min
+- Mínimo fresco: 40%
 - Muestra warning: mayor riesgo de repetición percibida.
 
 Recomendación inicial: 20-30% de reuse, 25-35% de extensión interna y mínimo 30 minutos frescos por vídeo de 60 minutos.
