@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from yt_music_factory.config import category_for, load_categories, load_spec
-from yt_music_factory.seo import VideoChapter, build_local_metadata
+from yt_music_factory.seo import VideoChapter, _with_chapters, build_local_metadata
 
 
 def test_load_demo_spec_and_metadata():
@@ -40,3 +40,32 @@ def test_metadata_uses_supplied_chapters():
     assert "00:00 Track 01" in metadata.description
     assert "03:00 Track 02" in metadata.description
     assert metadata.to_json()["chapters"][1]["start_seconds"] == 180
+
+
+def test_chapter_cleanup_removes_duplicate_model_timestamps():
+    description = """A calm focus mix.
+
+00:00 Track 01
+03:00 Track 02
+06:00 Track 03
+
+#lofi #focus
+
+Chapters:
+00:00 Track 01
+03:00 Track 02
+06:00 Track 03
+"""
+
+    result = _with_chapters(
+        description,
+        [
+            VideoChapter(start_seconds=0, title="Track 01"),
+            VideoChapter(start_seconds=180, title="Track 02"),
+            VideoChapter(start_seconds=360, title="Track 03"),
+        ],
+    )
+
+    assert result.count("00:00 Track 01") == 1
+    assert result.count("Chapters:") == 1
+    assert "#lofi #focus" in result

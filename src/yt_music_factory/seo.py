@@ -134,12 +134,23 @@ def _with_chapters(description: str, chapters: list[VideoChapter] | None) -> str
     chapter_text = _format_chapters(chapters)
     if not chapter_text:
         return description.strip()
-    description = re.sub(
-        r"\n\n(?:Chapters|Tracklist):\n(?:\d{1,2}:\d{2}(?::\d{2})?.*(?:\n|$))+",
-        "\n",
-        description.strip(),
-        flags=re.I,
-    ).strip()
+    lines = description.strip().splitlines()
+    cleaned_lines = []
+    timestamp_line = re.compile(r"^\s*\d{1,2}:\d{2}(?::\d{2})?\s+.+")
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if timestamp_line.match(stripped):
+            continue
+        next_timestamp = False
+        for next_line in lines[idx + 1 :]:
+            if not next_line.strip():
+                continue
+            next_timestamp = bool(timestamp_line.match(next_line.strip()))
+            break
+        if stripped.lower().rstrip(":") in {"chapters", "tracklist"} and next_timestamp:
+            continue
+        cleaned_lines.append(line)
+    description = "\n".join(cleaned_lines).strip()
     return f"{description.strip()}\n\nChapters:\n{chapter_text}".strip()
 
 
