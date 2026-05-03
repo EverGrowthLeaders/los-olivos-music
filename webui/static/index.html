@@ -369,8 +369,8 @@
               <button type="button" @click="jobForm.instrumental = !jobForm.instrumental"
                 class="w-9 h-5 rounded-full relative transition-colors flex-shrink-0"
                 :class="jobForm.instrumental ? 'bg-violet-600' : 'bg-zinc-700'">
-                <div class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm"
-                  :class="jobForm.instrumental ? 'translate-x-4' : 'translate-x-0.5'"></div>
+                <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm"
+                  :class="jobForm.instrumental ? 'translate-x-4' : 'translate-x-0'"></div>
               </button>
               <span class="text-sm text-zinc-300">Solo instrumental <span class="text-zinc-600">(sin voces)</span></span>
             </label>
@@ -521,8 +521,8 @@
               <button type="button" @click="jobForm.upload = !jobForm.upload"
                 class="w-9 h-5 rounded-full relative transition-colors flex-shrink-0"
                 :class="jobForm.upload ? 'bg-violet-600' : 'bg-zinc-700'">
-                <div class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm"
-                  :class="jobForm.upload ? 'translate-x-4' : 'translate-x-0.5'"></div>
+                <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm"
+                  :class="jobForm.upload ? 'translate-x-4' : 'translate-x-0'"></div>
               </button>
               <div>
                 <div class="text-sm text-zinc-300">Subir automáticamente a YouTube</div>
@@ -859,8 +859,8 @@
               <button @click="toggleSchedule(schedule)"
                 class="mt-0.5 flex-shrink-0 w-10 h-6 rounded-full relative transition-colors"
                 :class="schedule.enabled ? 'bg-emerald-600' : 'bg-zinc-700'">
-                <span class="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
-                  :class="schedule.enabled ? 'translate-x-4' : 'translate-x-0.5'"></span>
+                <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
+                  :class="schedule.enabled ? 'translate-x-4' : 'translate-x-0'"></span>
               </button>
 
               <!-- Info -->
@@ -1006,7 +1006,7 @@
               <h2 class="text-sm font-semibold">Reutilización entre vídeos</h2>
               <button @click="assetStrategy.cross_video_reuse.enabled = !assetStrategy.cross_video_reuse.enabled; markStrategyCustom(); estimateAssetStrategy()"
                 class="w-10 h-6 rounded-full relative transition-colors" :class="assetStrategy.cross_video_reuse.enabled ? 'bg-violet-600' : 'bg-zinc-700'">
-                <span class="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="assetStrategy.cross_video_reuse.enabled ? 'translate-x-4' : 'translate-x-0.5'"></span>
+                <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="assetStrategy.cross_video_reuse.enabled ? 'translate-x-4' : 'translate-x-0'"></span>
               </button>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1032,7 +1032,7 @@
               <h2 class="text-sm font-semibold">Ampliación interna</h2>
               <button @click="assetStrategy.internal_extension.enabled = !assetStrategy.internal_extension.enabled; markStrategyCustom(); estimateAssetStrategy()"
                 class="w-10 h-6 rounded-full relative transition-colors" :class="assetStrategy.internal_extension.enabled ? 'bg-violet-600' : 'bg-zinc-700'">
-                <span class="absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="assetStrategy.internal_extension.enabled ? 'translate-x-4' : 'translate-x-0.5'"></span>
+                <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform" :class="assetStrategy.internal_extension.enabled ? 'translate-x-4' : 'translate-x-0'"></span>
               </button>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
