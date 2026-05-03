@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import JobSpec, category_for, load_categories, load_spec, resolve_asset_paths
-from .ffmpeg import make_audio_loop, make_thumbnail, make_video
+from .ffmpeg import build_audio_chapters, make_audio_loop, make_thumbnail, make_video
 from .providers.image import get_image_provider
 from .providers.music import get_music_provider
-from .seo import VideoMetadata, build_metadata, save_metadata
+from .seo import VideoChapter, VideoMetadata, build_metadata, save_metadata
 from .utils import ensure_dir, write_json
 from .youtube import upload_video
 
@@ -34,6 +34,10 @@ class PipelineResult:
             "thumbnail": str(self.thumbnail),
             "metadata_path": str(self.metadata_path),
             "youtube_video_id": self.youtube_video_id,
+            "chapters": [
+                {"start_seconds": chapter.start_seconds, "title": chapter.title}
+                for chapter in self.metadata.chapters or []
+            ],
         }
 
 
@@ -63,9 +67,6 @@ def run_loaded_pipeline(
     render_dir = ensure_dir(job_dir / "render")
     print(f"[pipeline] Job '{spec.job.slug}' started", flush=True)
     print(f"[pipeline] Target duration: {spec.job.target_minutes:g} minutes", flush=True)
-    metadata = build_metadata(spec, category)
-    metadata_path = save_metadata(job_dir / "youtube_metadata.json", metadata)
-    print(f"[pipeline] Metadata ready: {metadata_path}", flush=True)
 
     asset_audio, asset_images = resolve_asset_paths(spec)
     audio_files = [p for p in asset_audio if p.exists()]
@@ -83,6 +84,14 @@ def run_loaded_pipeline(
         )
         audio_files = provider.generate(spec, category, audio_dir)
     print(f"[audio] Ready: {len(audio_files)} source audio file(s)", flush=True)
+
+    print("[metadata] Building automatic chapters from source tracks", flush=True)
+    audio_chapters = build_audio_chapters(audio_files, spec.job.target_seconds)
+    chapters = [VideoChapter(chapter.start_seconds, chapter.title) for chapter in audio_chapters]
+    print(f"[metadata] Ready: {len(chapters)} chapter marker(s)", flush=True)
+    metadata = build_metadata(spec, category, chapters=chapters)
+    metadata_path = save_metadata(job_dir / "youtube_metadata.json", metadata)
+    print(f"[metadata] Metadata ready: {metadata_path}", flush=True)
 
     image_files = [p for p in asset_images if p.exists()]
     missing_images = [str(p) for p in asset_images if not p.exists()]

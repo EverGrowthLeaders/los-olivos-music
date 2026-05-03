@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from yt_music_factory.config import category_for, load_categories, load_spec
-from yt_music_factory.seo import build_local_metadata
+from yt_music_factory.seo import VideoChapter, build_local_metadata
 
 
 def test_load_demo_spec_and_metadata():
@@ -21,3 +21,22 @@ def test_load_demo_spec_and_metadata():
 def test_resolution_validation():
     spec = load_spec(Path("examples/local_demo.yaml"))
     assert spec.video.width_height == (1280, 720)
+
+
+def test_metadata_uses_supplied_chapters():
+    spec = load_spec(Path("examples/local_demo.yaml"))
+    categories = load_categories(Path("config/categories.yaml"))
+    category = category_for(spec, categories)
+    metadata = build_local_metadata(
+        spec,
+        category,
+        chapters=[
+            VideoChapter(start_seconds=0, title="Track 01"),
+            VideoChapter(start_seconds=180, title="Track 02"),
+        ],
+    )
+
+    assert "Chapters:" in metadata.description
+    assert "00:00 Track 01" in metadata.description
+    assert "03:00 Track 02" in metadata.description
+    assert metadata.to_json()["chapters"][1]["start_seconds"] == 180

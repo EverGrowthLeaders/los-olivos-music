@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .config import VideoConfig
 from .utils import ensure_dir, require_binary, run_cmd, run_cmd_json
+
+
+@dataclass(slots=True)
+class AudioChapter:
+    start_seconds: int
+    title: str
+    duration_seconds: int
+    audio_file: Path
 
 
 def ffprobe_duration(path: Path) -> float:
@@ -50,6 +59,33 @@ def write_audio_manifest(audio_files: list[Path], target_seconds: int, manifest_
         idx += 1
     manifest_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return manifest_path
+
+
+def build_audio_chapters(audio_files: list[Path], target_seconds: int) -> list[AudioChapter]:
+    if not audio_files:
+        return []
+    durations = [max(1, int(round(ffprobe_duration(path)))) for path in audio_files]
+    chapters: list[AudioChapter] = []
+    elapsed = 0
+    idx = 0
+    while elapsed < target_seconds:
+        audio_idx = idx % len(audio_files)
+        duration = min(durations[audio_idx], max(1, target_seconds - elapsed))
+        loop = idx // len(audio_files) + 1
+        title = f"Track {audio_idx + 1:02d}"
+        if loop > 1:
+            title = f"{title} (loop {loop})"
+        chapters.append(
+            AudioChapter(
+                start_seconds=elapsed,
+                title=title,
+                duration_seconds=duration,
+                audio_file=audio_files[audio_idx],
+            )
+        )
+        elapsed += duration
+        idx += 1
+    return chapters
 
 
 def transcode_audio_inputs(audio_files: list[Path], out_dir: Path) -> list[Path]:

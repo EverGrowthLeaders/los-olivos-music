@@ -17,6 +17,12 @@ YOUTUBE_TAGS_SOFT_LIMIT = 450
 
 
 @dataclass(slots=True)
+class VideoChapter:
+    start_seconds: int
+    title: str
+
+
+@dataclass(slots=True)
 class VideoMetadata:
     title: str
     description: str
@@ -28,6 +34,7 @@ class VideoMetadata:
     privacy_status: str
     notify_subscribers: bool
     publish_at: str | None = None
+    chapters: list[VideoChapter] | None = None
 
     def to_upload_body(self) -> dict[str, Any]:
         status: dict[str, Any] = {
@@ -55,6 +62,10 @@ class VideoMetadata:
     def to_json(self) -> dict[str, Any]:
         payload = self.to_upload_body()
         payload["notifySubscribers"] = self.notify_subscribers
+        payload["chapters"] = [
+            {"start_seconds": chapter.start_seconds, "title": chapter.title}
+            for chapter in self.chapters or []
+        ]
         return payload
 
 
@@ -77,6 +88,20 @@ def _build_title(spec: JobSpec, category: dict[str, Any], primary_keyword: str) 
     return clamp_title(title)
 
 
+def _format_timestamp(total_seconds: int) -> str:
+    total_seconds = max(0, int(total_seconds))
+    h = total_seconds // 3600
+    m = (total_seconds % 3600) // 60
+    s = total_seconds % 60
+    return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+def _format_chapters(chapters: list[VideoChapter] | None) -> str:
+    if not chapters:
+        return ""
+    return "\n".join(f"{_format_timestamp(chapter.start_seconds)} {chapter.title}" for chapter in chapters)
+
+
 def _tracklist(track_count: int, track_duration_seconds: int, target_seconds: int) -> str:
     if track_count <= 0:
         return ""
@@ -84,11 +109,7 @@ def _tracklist(track_count: int, track_duration_seconds: int, target_seconds: in
     elapsed = 0
     idx = 1
     while elapsed < target_seconds and idx <= max(track_count, 1):
-        h = elapsed // 3600
-        m = (elapsed % 3600) // 60
-        s = elapsed % 60
-        stamp = f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
-        lines.append(f"{stamp} — Original AI-assisted track {idx:02d}")
+        lines.append(f"{_format_timestamp(elapsed)} Original AI-assisted track {idx:02d}")
         elapsed += max(1, track_duration_seconds)
         idx += 1
     return "\n".join(lines)
@@ -109,7 +130,25 @@ def _bounded_tags(tags: list[str]) -> list[str]:
     return result
 
 
-def build_local_metadata(spec: JobSpec, category: dict[str, Any]) -> VideoMetadata:
+def _with_chapters(description: str, chapters: list[VideoChapter] | None) -> str:
+    chapter_text = _format_chapters(chapters)
+    if not chapter_text:
+        return description.strip()
+    description = re.sub(
+        r"\n\n(?:Chapters|Tracklist):\n(?:\d{1,2}:\d{2}(?::\d{2})?.*(?:\n|$))+",
+        "\n",
+        description.strip(),
+        flags=re.I,
+    ).strip()
+    return f"{description.strip()}\n\nChapters:\n{chapter_text}".strip()
+
+
+def build_local_metadata(
+    spec: JobSpec,
+    category: dict[str, Any],
+    *,
+    chapters: list[VideoChapter] | None = None,
+) -> VideoMetadata:
     primary_keyword = spec.seo.primary_keyword or (category.get("primary_keywords") or ["ai music"])[0]
     title = _build_title(spec, category, primary_keyword)
     category_id = spec.youtube.category_id or str(category.get("youtube_category_id") or "10")
@@ -119,7 +158,7 @@ def build_local_metadata(spec: JobSpec, category: dict[str, Any]) -> VideoMetada
         + list(category.get("tags") or [])
         + [spec.category_key.replace("_", " "), "original music", "background music"]
     )
-    tracklist = _tracklist(
+    tracklist = _format_chapters(chapters) or _tracklist(
         spec.music.track_count,
         spec.music.track_duration_seconds,
         spec.job.target_seconds,
@@ -144,7 +183,7 @@ Original long-form music mix for {value}.
 
 Use it as background music for work, study, relaxation, creative sessions, or calm ambience.
 
-Tracklist:
+Chapters:
 {tracklist or "Continuous original mix"}
 
 Visuals: AI-assisted still artwork generated for this upload.
@@ -166,16 +205,22 @@ No artist voice, song title, label, or copyrighted lyric references were intenti
         privacy_status=spec.youtube.privacy_status,
         notify_subscribers=spec.youtube.notify_subscribers,
         publish_at=spec.youtube.publish_at,
+        chapters=chapters,
     )
 
 
-def build_gemini_metadata(spec: JobSpec, category: dict[str, Any]) -> VideoMetadata:
+def build_gemini_metadata(
+    spec: JobSpec,
+    category: dict[str, Any],
+    *,
+    chapters: list[VideoChapter] | None = None,
+) -> VideoMetadata:
     """Generate metadata via Gemini, then enforce local safety and size constraints.
 
     The local template is used as a fallback and as a guardrail so a bad model output cannot break
     YouTube upload constraints.
     """
-    fallback = build_local_metadata(spec, category)
+    fallback = build_local_metadata(spec, category, chapters=chapters)
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return fallback
@@ -188,6 +233,7 @@ def build_gemini_metadata(spec: JobSpec, category: dict[str, Any]) -> VideoMetad
             "Title must be <= 100 characters.",
             "Tags must be an array of short YouTube tags; no artist names; no song titles; no label names.",
             "Description must include an AI/synthetic music disclosure.",
+            "Keep the supplied chapter timestamps exactly if chapters are provided.",
             "Do not claim the music is human-composed or copyright-free unless the license is verified separately.",
         ],
         "category": category,
@@ -199,6 +245,10 @@ def build_gemini_metadata(spec: JobSpec, category: dict[str, Any]) -> VideoMetad
         },
         "primary_keyword": spec.seo.primary_keyword,
         "music_provider": spec.music.provider,
+        "chapters": [
+            {"timestamp": _format_timestamp(chapter.start_seconds), "title": chapter.title}
+            for chapter in chapters or []
+        ],
         "channel_style": {
             "aesthetic": spec.channel_style.aesthetic,
             "visual_style": spec.channel_style.visual_style,
@@ -218,7 +268,7 @@ def build_gemini_metadata(spec: JobSpec, category: dict[str, Any]) -> VideoMetad
         text = _extract_gemini_text(response.json())
         candidate = _parse_json_object(text)
         title = clamp_title(str(candidate.get("title") or fallback.title))
-        description = str(candidate.get("description") or fallback.description).strip()
+        description = _with_chapters(str(candidate.get("description") or fallback.description), chapters)
         if "synthetic" not in description.lower() and "ai" not in description.lower():
             description += "\n\nDisclosure: this video uses synthetically generated or AI-assisted music."
         tags = _bounded_tags([str(t) for t in candidate.get("tags", [])] + fallback.tags)
@@ -233,6 +283,7 @@ def build_gemini_metadata(spec: JobSpec, category: dict[str, Any]) -> VideoMetad
             privacy_status=fallback.privacy_status,
             notify_subscribers=fallback.notify_subscribers,
             publish_at=fallback.publish_at,
+            chapters=chapters,
         )
     except Exception as exc:  # noqa: BLE001 - fallback is intentionally resilient
         print(f"Gemini SEO generation failed; using local metadata. Reason: {exc}")
@@ -259,10 +310,15 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     return parsed
 
 
-def build_metadata(spec: JobSpec, category: dict[str, Any]) -> VideoMetadata:
+def build_metadata(
+    spec: JobSpec,
+    category: dict[str, Any],
+    *,
+    chapters: list[VideoChapter] | None = None,
+) -> VideoMetadata:
     if spec.seo.provider == "gemini":
-        return build_gemini_metadata(spec, category)
-    return build_local_metadata(spec, category)
+        return build_gemini_metadata(spec, category, chapters=chapters)
+    return build_local_metadata(spec, category, chapters=chapters)
 
 
 def save_metadata(path: Path, metadata: VideoMetadata) -> Path:
