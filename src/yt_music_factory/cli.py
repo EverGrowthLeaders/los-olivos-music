@@ -134,6 +134,8 @@ def doctor_report() -> dict[str, str | bool]:
     report["MUBERT_ACCESS_TOKEN"] = bool(os.getenv("MUBERT_ACCESS_TOKEN"))
     client_secrets = Path(os.getenv("YOUTUBE_CLIENT_SECRETS", "client_secret.json"))
     report["YOUTUBE_CLIENT_SECRETS"] = str(client_secrets) if client_secrets.exists() else False
+    report["YOUTUBE_CLIENT_ID"] = bool(os.getenv("YOUTUBE_CLIENT_ID"))
+    report["YOUTUBE_CLIENT_SECRET"] = bool(os.getenv("YOUTUBE_CLIENT_SECRET"))
     report["yt_music_factory_cli"] = bool(shutil.which("ymf")) or "available via python -m yt_music_factory.cli"
     return report
 

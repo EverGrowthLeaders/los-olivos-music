@@ -63,10 +63,11 @@ def _get_youtube_service(*, client_secrets: Path | None, token_file: Path | None
 
     client_secrets = client_secrets or Path(os.getenv("YOUTUBE_CLIENT_SECRETS", "client_secret.json"))
     token_file = token_file or Path(os.getenv("YOUTUBE_TOKEN_FILE", ".secrets/youtube-token.json"))
-    if not client_secrets.exists():
+    client_config = _youtube_client_config_from_env()
+    if not client_secrets.exists() and client_config is None:
         raise FileNotFoundError(
             f"YouTube client secrets not found: {client_secrets}. Create OAuth desktop credentials "
-            "in Google Cloud and save them here."
+            "in Google Cloud and save them here, or set YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET."
         )
 
     creds = None
@@ -76,11 +77,32 @@ def _get_youtube_service(*, client_secrets: Path | None, token_file: Path | None
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(str(client_secrets), [YOUTUBE_UPLOAD_SCOPE])
+            if client_secrets.exists():
+                flow = InstalledAppFlow.from_client_secrets_file(str(client_secrets), [YOUTUBE_UPLOAD_SCOPE])
+            else:
+                flow = InstalledAppFlow.from_client_config(client_config, [YOUTUBE_UPLOAD_SCOPE])
             creds = flow.run_local_server(port=0)
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(creds.to_json(), encoding="utf-8")
     return build("youtube", "v3", credentials=creds)
+
+
+def _youtube_client_config_from_env() -> dict[str, Any] | None:
+    client_id = os.getenv("YOUTUBE_CLIENT_ID")
+    client_secret = os.getenv("YOUTUBE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return None
+    return {
+        "installed": {
+            "client_id": client_id,
+            "project_id": os.getenv("YOUTUBE_PROJECT_ID", ""),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_secret": client_secret,
+            "redirect_uris": ["http://localhost"],
+        }
+    }
 
 
 def _resumable_upload(request) -> dict[str, Any]:
