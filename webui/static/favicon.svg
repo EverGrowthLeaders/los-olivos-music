@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="YT Music Factory">
+  <defs>
+    <linearGradient id="bg" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#18181b"/>
+      <stop offset="1" stop-color="#09090b"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="18" y1="18" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="0.55" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#ef4444"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <rect x="6" y="6" width="52" height="52" rx="11" fill="none" stroke="#27272a" stroke-width="2"/>
+  <path d="M24 18v28" fill="none" stroke="url(#mark)" stroke-width="5" stroke-linecap="round"/>
+  <path d="M24 26c7-8 19-7 24 2c-7 1-13 5-17 12" fill="none" stroke="url(#mark)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M31 25l16 9l-16 9z" fill="#fafafa" opacity="0.94"/>
+  <circle cx="22" cy="48" r="5" fill="#8b5cf6"/>
+</svg>

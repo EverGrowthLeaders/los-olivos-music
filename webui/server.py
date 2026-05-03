@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -378,8 +378,8 @@ def robots_txt() -> str:
 
 
 @app.get("/favicon.ico")
-def favicon() -> Response:
-    return Response(status_code=204)
+def favicon() -> FileResponse:
+    return FileResponse(str(Path(__file__).parent / "static" / "favicon.svg"), media_type="image/svg+xml")
 
 
 class JobBody(BaseModel):
