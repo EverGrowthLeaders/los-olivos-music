@@ -132,12 +132,6 @@ class LyriaMusicProvider:
 
         async with client.aio.live.music.connect(model=model) as session:
             await session.set_weighted_prompts(prompts=[types.WeightedPrompt(text=prompt, weight=1.0)])
-            await session.set_music_generation_config(
-                config=types.LiveMusicGenerationConfig(
-                    audio_format="pcm16",
-                    sample_rate_hz=PCM_SAMPLE_RATE,
-                )
-            )
             await session.play()
 
             try:
