@@ -935,8 +935,8 @@
       ],
 
       imageProviders: [
-        { value: 'local',  label: 'Local',  note: 'Sin API key' },
-        { value: 'gemini', label: 'Gemini', note: 'Google AI' },
+        { value: 'local',  label: 'Local',  note: 'Placeholder sin texto' },
+        { value: 'gemini', label: 'Gemini', note: 'Respeta estética' },
         { value: 'assets', label: 'Assets', note: 'Archivos propios' },
       ],
 
@@ -1111,7 +1111,16 @@
           const data = await r.json();
           this.settings = data;
           this.settingsForm = { ...data };
+          this.applyProviderDefaults();
         } catch { /* ignore */ }
+      },
+
+      applyProviderDefaults() {
+        if (this.settings.GEMINI_API_KEY) {
+          if (this.jobForm.images_provider === 'local') this.jobForm.images_provider = 'gemini';
+          if (this.jobForm.music_provider === 'local') this.jobForm.music_provider = 'lyria';
+          if (this.jobForm.seo_provider === 'local') this.jobForm.seo_provider = 'gemini';
+        }
       },
 
       async loadYoutubeStatus() {

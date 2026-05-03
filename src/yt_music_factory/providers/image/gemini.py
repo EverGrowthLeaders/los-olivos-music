@@ -27,12 +27,11 @@ class GeminiImageProvider:
 
     def generate(self, spec: JobSpec, category: dict, out_dir: Path) -> list[Path]:
         ensure_dir(out_dir)
-        prompt = spec.images.prompt or category.get("image_prompt")
-        if not prompt:
+        base_prompt = spec.images.prompt or category.get("image_prompt")
+        if not base_prompt:
             raise ValueError("An image prompt is required for Gemini image generation")
         style_note = channel_style_prompt(spec.channel_style, media="image")
-        if style_note:
-            prompt = f"{prompt}\n\nAccount-level art direction:\n{style_note}"
+        prompt = self._compose_prompt(str(base_prompt), style_note)
         assert_prompt_is_licensing_safe(prompt, field="images.prompt")
         count = max(1, spec.images.count)
         paths: list[Path] = []
@@ -80,6 +79,29 @@ class GeminiImageProvider:
         if "X" in normalized:
             return "2K"
         return "2K"
+
+    @staticmethod
+    def _compose_prompt(base_prompt: str, style_note: str = "") -> str:
+        prompt_parts = [
+            "Create a finished 16:9 YouTube music background image.",
+            "Hard requirements: no text, no captions, no typography, no watermarks, no logos, no UI, no labels.",
+        ]
+        if style_note:
+            prompt_parts.extend(
+                [
+                    "The following account-level art direction is mandatory and has priority over the category prompt.",
+                    "If any category detail conflicts with it, follow the account-level art direction.",
+                    style_note,
+                ]
+            )
+        prompt_parts.extend(
+            [
+                "Category/use-case prompt:",
+                base_prompt,
+                "Final check: output only the background artwork; do not add any words, titles, filenames, slugs, captions, or borders.",
+            ]
+        )
+        return "\n".join(prompt_parts)
 
     @staticmethod
     def _build_payload(prompt: str, aspect_ratio: str, image_size: str) -> dict[str, Any]:
