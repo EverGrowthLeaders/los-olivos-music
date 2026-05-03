@@ -180,7 +180,7 @@ job:
 category_key: focus_lofi
 music:
   provider: lyria     # local | lyria | elevenlabs | mubert | assets
-  model: lyria-3-pro-preview
+  model: lyria-realtime-exp
   track_count: 20
   track_duration_seconds: 180
   instrumental: true
@@ -261,4 +261,3 @@ examples/*.yaml
   mubert_playlist_1h.yaml  # alternativa instrumental por playlist
 tests/*.py
 ```
-

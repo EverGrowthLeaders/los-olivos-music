@@ -1,29 +1,35 @@
 from __future__ import annotations
 
-import base64
+import asyncio
+import inspect
 import os
+import wave
 from pathlib import Path
 from typing import Any
-
-import requests
 
 from ...config import JobSpec
 from ...prompt_safety import assert_prompt_is_licensing_safe
 from ...utils import ensure_dir, write_json
 
 
-class LyriaMusicProvider:
-    """Google Lyria 3 music generation through the Gemini REST API.
+PCM_SAMPLE_RATE = 48_000
+PCM_CHANNELS = 2
+PCM_SAMPLE_WIDTH = 2
 
-    Uses the public Gemini API model endpoint by default:
-    https://generativelanguage.googleapis.com/v1beta/models/lyria-3-pro-preview:generateContent
+
+class LyriaMusicProvider:
+    """Google Lyria RealTime music generation through the Gemini Live Music API.
+
+    Lyria music generation is not a normal generateContent request. The public Gemini
+    API exposes it as a bidirectional Live Music/WebSocket stream that emits raw
+    16-bit PCM stereo audio at 48 kHz.
     """
 
     name = "lyria"
 
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.model = model or os.getenv("GEMINI_MUSIC_MODEL", "lyria-3-pro-preview")
+        self.model = self._normalize_model(model or os.getenv("GEMINI_MUSIC_MODEL", "lyria-realtime-exp"))
         if not self.api_key:
             raise RuntimeError("GEMINI_API_KEY is required for music.provider=lyria")
 
@@ -34,13 +40,12 @@ class LyriaMusicProvider:
             raise ValueError("A music prompt is required for Lyria generation")
         assert_prompt_is_licensing_safe(prompt, field="music.prompt")
 
-        model = spec.music.model or self.model
-        output_format = self._normalize_output_format(spec.music.output_format)
+        model = self._normalize_model(spec.music.model or self.model)
         count = max(1, spec.music.track_count)
         paths: list[Path] = []
 
         for idx in range(count):
-            out = out_dir / f"lyria_track_{idx + 1:02d}.{output_format}"
+            out = out_dir / f"lyria_track_{idx + 1:02d}.wav"
             sidecar = out.with_suffix(".json")
             if out.exists() and out.stat().st_size > 0:
                 paths.append(out)
@@ -52,20 +57,20 @@ class LyriaMusicProvider:
                 duration_seconds=spec.music.track_duration_seconds,
                 instrumental=spec.music.instrumental,
             )
-            payload = self._build_payload(track_prompt)
-            response = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
-                json=payload,
-                timeout=600,
+            audio_bytes = asyncio.run(
+                self._generate_pcm_stream(
+                    model=model,
+                    prompt=track_prompt,
+                    duration_seconds=spec.music.track_duration_seconds,
+                )
             )
-            if response.status_code >= 400:
+            if not audio_bytes:
                 raise RuntimeError(
-                    f"Lyria request failed with HTTP {response.status_code}: {response.text[:1000]}"
+                    "Lyria stream ended before audio was received. "
+                    "Check model access, safety filters, and Gemini API billing/quota."
                 )
 
-            parsed = response.json()
-            audio_bytes, text_parts = self._extract_audio_and_text(parsed, api_key=self.api_key)
+            self._write_wav(out, audio_bytes)
             write_json(
                 sidecar,
                 {
@@ -73,31 +78,24 @@ class LyriaMusicProvider:
                     "model": model,
                     "track_number": idx + 1,
                     "prompt": track_prompt,
-                    "text_parts": text_parts,
+                    "format": "pcm16-wav",
+                    "sample_rate_hz": PCM_SAMPLE_RATE,
+                    "channels": PCM_CHANNELS,
                 },
             )
-            if not audio_bytes:
-                raw_response = out_dir / f"lyria_track_{idx + 1:02d}_raw_response.json"
-                write_json(raw_response, parsed)
-                raise RuntimeError(
-                    "Lyria response did not include audio data. "
-                    f"Raw response saved to {raw_response}. "
-                    f"Response summary: {self._response_debug_summary(parsed)}"
-                )
-
-            out.write_bytes(audio_bytes)
             paths.append(out)
 
         return paths
 
     @staticmethod
-    def _normalize_output_format(value: str) -> str:
-        normalized = (value or "mp3").lower().strip().lstrip(".")
-        if normalized in {"mp3", "mpeg"}:
-            return "mp3"
-        if normalized == "wav":
-            return "wav"
-        raise ValueError("Lyria music.output_format must be 'mp3' or 'wav'")
+    def _normalize_model(value: str) -> str:
+        model = (value or "lyria-realtime-exp").strip()
+        legacy_rest_models = {"lyria-3-pro-preview", "lyria-3-pro", "models/lyria-3-pro-preview"}
+        if model in legacy_rest_models:
+            return "models/lyria-realtime-exp"
+        if not model.startswith("models/"):
+            return f"models/{model}"
+        return model
 
     @staticmethod
     def _build_track_prompt(
@@ -107,106 +105,83 @@ class LyriaMusicProvider:
         duration_seconds: int,
         instrumental: bool,
     ) -> str:
-        duration = max(30, int(duration_seconds))
-        vocal_clause = "Instrumental only, no vocals, no lyrics." if instrumental else "Original vocals and lyrics are allowed."
+        duration = max(10, int(duration_seconds))
+        vocal_clause = (
+            "Instrumental only, no vocals, no lyrics."
+            if instrumental
+            else "Original non-lyrical vocalizations are allowed, but do not imitate any real singer."
+        )
         return (
-            f"Create an original {duration}-second music track. {vocal_clause}\n"
+            f"Generate approximately {duration} seconds of original music. {vocal_clause}\n"
             f"Creative direction: {base_prompt}\n"
-            f"Variation {track_number}: use a new original melody, harmonic progression, and arrangement "
+            f"Variation {track_number}: use a distinct original melody, groove, and arrangement "
             "while keeping the same mood and use case. Do not imitate any existing artist, song, "
             "label, performer, or copyrighted recording."
         )
 
-    @staticmethod
-    def _build_payload(prompt: str) -> dict[str, Any]:
-        return {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseModalities": ["AUDIO", "TEXT"]},
-        }
+    async def _generate_pcm_stream(self, *, model: str, prompt: str, duration_seconds: int) -> bytes:
+        try:
+            from google import genai
+            from google.genai import types
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError("Install google-genai to use Lyria music generation") from exc
+
+        target_bytes = max(1, int(duration_seconds)) * PCM_SAMPLE_RATE * PCM_CHANNELS * PCM_SAMPLE_WIDTH
+        chunks: list[bytes] = []
+        client = genai.Client(api_key=self.api_key, http_options={"api_version": "v1alpha"})
+
+        async with client.aio.live.music.connect(model=model) as session:
+            await session.set_weighted_prompts(prompts=[types.WeightedPrompt(text=prompt, weight=1.0)])
+            await session.set_music_generation_config(
+                config=types.LiveMusicGenerationConfig(
+                    audio_format="pcm16",
+                    sample_rate_hz=PCM_SAMPLE_RATE,
+                )
+            )
+            await session.play()
+
+            try:
+                while sum(len(chunk) for chunk in chunks) < target_bytes:
+                    async for message in session.receive():
+                        for chunk in self._audio_chunks_from_message(message):
+                            chunks.append(chunk)
+                            if sum(len(item) for item in chunks) >= target_bytes:
+                                break
+                        if sum(len(item) for item in chunks) >= target_bytes:
+                            break
+            finally:
+                for method_name in ("stop", "pause"):
+                    method = getattr(session, method_name, None)
+                    if method is None:
+                        continue
+                    result = method()
+                    if inspect.isawaitable(result):
+                        await result
+                    break
+
+        return b"".join(chunks)[:target_bytes]
 
     @staticmethod
-    def _extract_audio_and_text(payload: dict[str, Any], api_key: str | None = None) -> tuple[bytes | None, list[str]]:
-        text_parts: list[str] = []
-        audio_bytes: bytes | None = None
-        for part in LyriaMusicProvider._iter_parts(payload):
-            text = part.get("text")
-            if isinstance(text, str) and text.strip():
-                text_parts.append(text)
-            if audio_bytes is None:
-                audio_bytes = LyriaMusicProvider._audio_bytes_from_part(part, api_key=api_key)
-        return audio_bytes, text_parts
+    def _audio_chunks_from_message(message: Any) -> list[bytes]:
+        server_content = getattr(message, "server_content", None) or getattr(message, "serverContent", None)
+        audio_chunks = getattr(server_content, "audio_chunks", None) or getattr(server_content, "audioChunks", None)
+        result: list[bytes] = []
+        for chunk in audio_chunks or []:
+            data = getattr(chunk, "data", None)
+            if isinstance(chunk, dict):
+                data = chunk.get("data")
+            if isinstance(data, str):
+                import base64
+
+                result.append(base64.b64decode(data))
+            elif isinstance(data, bytes):
+                result.append(data)
+        return result
 
     @staticmethod
-    def _iter_parts(value: Any):
-        yield from LyriaMusicProvider._iter_parts_seen(value, set())
-
-    @staticmethod
-    def _iter_parts_seen(value: Any, seen: set[int]):
-        if isinstance(value, dict):
-            ident = id(value)
-            if any(
-                key in value
-                for key in ("text", "inlineData", "inline_data", "fileData", "file_data")
-            ) and ident not in seen:
-                seen.add(ident)
-                yield value
-            parts = value.get("parts")
-            if isinstance(parts, list):
-                for part in parts:
-                    if isinstance(part, dict) and id(part) not in seen:
-                        seen.add(id(part))
-                        yield part
-            for nested in value.values():
-                yield from LyriaMusicProvider._iter_parts_seen(nested, seen)
-        elif isinstance(value, list):
-            for item in value:
-                yield from LyriaMusicProvider._iter_parts_seen(item, seen)
-
-    @staticmethod
-    def _audio_bytes_from_part(part: dict[str, Any], api_key: str | None = None) -> bytes | None:
-        inline = part.get("inlineData") or part.get("inline_data")
-        if isinstance(inline, dict):
-            mime_type = str(inline.get("mimeType") or inline.get("mime_type") or "")
-            data = inline.get("data")
-            if data and (mime_type.startswith("audio/") or not mime_type):
-                if isinstance(data, str):
-                    return base64.b64decode(data)
-                if isinstance(data, bytes):
-                    return data
-
-        file_data = part.get("fileData") or part.get("file_data")
-        if isinstance(file_data, dict):
-            mime_type = str(file_data.get("mimeType") or file_data.get("mime_type") or "")
-            file_uri = file_data.get("fileUri") or file_data.get("file_uri")
-            if isinstance(file_uri, str) and mime_type.startswith("audio/"):
-                headers = {"x-goog-api-key": api_key} if api_key else None
-                response = requests.get(file_uri, headers=headers, timeout=600)
-                response.raise_for_status()
-                return response.content
-        return None
-
-    @staticmethod
-    def _response_debug_summary(payload: dict[str, Any]) -> dict[str, Any]:
-        candidates = payload.get("candidates") or []
-        summary: dict[str, Any] = {
-            "candidate_count": len(candidates) if isinstance(candidates, list) else 0,
-            "finish_reasons": [],
-            "part_keys": [],
-            "mime_types": [],
-            "text_preview": [],
-        }
-        for candidate in candidates if isinstance(candidates, list) else []:
-            if isinstance(candidate, dict) and candidate.get("finishReason"):
-                summary["finish_reasons"].append(candidate.get("finishReason"))
-        for part in LyriaMusicProvider._iter_parts(payload):
-            summary["part_keys"].append(sorted(part.keys()))
-            text = part.get("text")
-            if isinstance(text, str) and text.strip():
-                summary["text_preview"].append(text.strip()[:300])
-            for key in ("inlineData", "inline_data", "fileData", "file_data"):
-                data = part.get(key)
-                if isinstance(data, dict):
-                    mime_type = data.get("mimeType") or data.get("mime_type")
-                    if mime_type:
-                        summary["mime_types"].append(mime_type)
-        return summary
+    def _write_wav(path: Path, pcm: bytes) -> None:
+        with wave.open(str(path), "wb") as wav:
+            wav.setnchannels(PCM_CHANNELS)
+            wav.setsampwidth(PCM_SAMPLE_WIDTH)
+            wav.setframerate(PCM_SAMPLE_RATE)
+            wav.writeframes(pcm)

@@ -6,11 +6,11 @@ job:
 category_key: focus_lofi
 music:
   provider: lyria
-  model: lyria-3-pro-preview
+  model: lyria-realtime-exp
   track_count: 20
   track_duration_seconds: 180
   instrumental: true
-  output_format: mp3
+  output_format: wav
   # prompt can be omitted; category prompt will be used.
   prompt:
 images:
