@@ -10,7 +10,9 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request
@@ -27,6 +29,7 @@ SCHEDULES_FILE = Path(
 )
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 SCHEDULE_UNITS = {"minutes": 60, "hours": 3600, "days": 86400}
+DEFAULT_SCHEDULE_TIMEZONE = "Europe/Madrid"
 _scheduler_task: asyncio.Task | None = None
 _running_schedule_ids: set[str] = set()
 
@@ -267,6 +270,38 @@ def _interval_seconds(schedule: dict) -> int:
     return max(60, int(value * SCHEDULE_UNITS.get(unit, 3600)))
 
 
+def _schedule_timezone() -> ZoneInfo:
+    name = os.getenv("YMF_SCHEDULE_TIMEZONE", DEFAULT_SCHEDULE_TIMEZONE)
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
+
+
+def _parse_run_time(value: str | None) -> tuple[int, int] | None:
+    if not value:
+        return None
+    match = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", str(value).strip())
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _next_run_at(schedule: dict, *, from_ts: float | None = None) -> float:
+    now = time.time() if from_ts is None else from_ts
+    run_time = _parse_run_time(schedule.get("run_time"))
+    if run_time and schedule.get("frequency_unit") == "days":
+        every_days = max(1, int(float(schedule.get("frequency_value") or 1)))
+        tz = _schedule_timezone()
+        now_dt = datetime.fromtimestamp(now, tz)
+        hour, minute = run_time
+        candidate = now_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if candidate <= now_dt:
+            candidate += timedelta(days=every_days)
+        return candidate.timestamp()
+    return now + _interval_seconds(schedule)
+
+
 def _safe_slug(value: str) -> str:
     value = re.sub(r"[^a-zA-Z0-9\s-]", "", value or "").lower()
     value = re.sub(r"\s+", "-", value).strip("-")
@@ -401,7 +436,7 @@ async def _run_schedule(schedule: dict) -> None:
                 "last_status": status,
                 "last_returncode": process.returncode,
                 "last_finished_at": time.time(),
-                "next_run_at": time.time() + _interval_seconds(schedule),
+                "next_run_at": _next_run_at(schedule),
                 "last_slug": slug,
             },
         )
@@ -413,7 +448,7 @@ async def _run_schedule(schedule: dict) -> None:
                 "last_status": "error",
                 "last_error": str(exc),
                 "last_finished_at": time.time(),
-                "next_run_at": time.time() + _interval_seconds(schedule),
+                "next_run_at": _next_run_at(schedule),
                 "last_slug": slug,
             },
         )
@@ -435,7 +470,7 @@ async def _scheduler_loop() -> None:
             schedule_id = str(schedule.get("id"))
             if schedule_id in _running_schedule_ids:
                 continue
-            next_run_at = float(schedule.get("next_run_at") or now + _interval_seconds(schedule))
+            next_run_at = float(schedule.get("next_run_at") or _next_run_at(schedule, from_ts=now))
             if "next_run_at" not in schedule:
                 _update_schedule(schedule_id, {"next_run_at": next_run_at})
                 continue
@@ -641,7 +676,9 @@ def create_schedule(body: ScheduleBody) -> dict:
     schedule["enabled"] = bool(schedule.get("enabled", True))
     schedule["frequency_value"] = float(schedule.get("frequency_value") or 24)
     schedule["frequency_unit"] = schedule.get("frequency_unit") if schedule.get("frequency_unit") in SCHEDULE_UNITS else "hours"
-    schedule["next_run_at"] = time.time() + _interval_seconds(schedule)
+    if schedule.get("frequency_unit") == "days" and not schedule.get("run_time"):
+        schedule["run_time"] = "09:00"
+    schedule["next_run_at"] = _next_run_at(schedule)
     schedules = _load_schedules()
     schedules.append(schedule)
     _save_schedules(schedules)
@@ -656,6 +693,10 @@ def update_schedule(schedule_id: str, body: ScheduleBody) -> dict:
         updates["frequency_value"] = float(updates["frequency_value"] or 24)
     if updates.get("frequency_unit") not in SCHEDULE_UNITS:
         updates.pop("frequency_unit", None)
+    if any(key in updates for key in ("frequency_value", "frequency_unit", "run_time")):
+        existing = next((item for item in _load_schedules() if item.get("id") == schedule_id), {})
+        preview = {**existing, **updates}
+        updates["next_run_at"] = _next_run_at(preview)
     updated = _update_schedule(schedule_id, updates)
     if updated is None:
         raise HTTPException(404, f"Schedule '{schedule_id}' not found")
