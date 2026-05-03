@@ -19,7 +19,9 @@ class GeminiImageProvider:
 
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.model = self._normalize_model(model or os.getenv("GEMINI_IMAGE_MODEL", "gemini-3-pro-image-preview"))
+        self.model = self._normalize_model(
+            model or os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image-preview")
+        )
         if not self.api_key:
             raise RuntimeError("GEMINI_API_KEY is required for images.provider=gemini")
 
@@ -61,15 +63,7 @@ class GeminiImageProvider:
 
     @staticmethod
     def _normalize_model(value: str) -> str:
-        model = (value or "gemini-3-pro-image-preview").strip()
-        legacy_models = {
-            "gemini-3.1-flash-image-preview",
-            "gemini-3.1-flash-image",
-            "gemini-3-flash-image-preview",
-        }
-        if model in legacy_models:
-            return "gemini-3-pro-image-preview"
-        return model
+        return (value or "gemini-3.1-flash-image-preview").strip()
 
     @staticmethod
     def _build_payload(prompt: str, aspect_ratio: str, image_size: str) -> dict[str, Any]:

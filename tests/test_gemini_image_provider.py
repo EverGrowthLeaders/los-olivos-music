@@ -1,11 +1,8 @@
 from yt_music_factory.providers.image.gemini import GeminiImageProvider
 
 
-def test_gemini_image_normalizes_legacy_preview_model():
-    assert (
-        GeminiImageProvider._normalize_model("gemini-3.1-flash-image-preview")
-        == "gemini-3-pro-image-preview"
-    )
+def test_gemini_image_keeps_nano_banana_2_model():
+    assert GeminiImageProvider._normalize_model("gemini-3.1-flash-image-preview") == "gemini-3.1-flash-image-preview"
 
 
 def test_gemini_image_payload_requests_text_and_image():

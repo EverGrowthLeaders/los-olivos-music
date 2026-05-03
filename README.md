@@ -24,7 +24,7 @@ Motivo: más adecuado para música instrumental, lo-fi, ambient, streaming/backg
 
 **Suno:** no se automatiza en este proyecto. Los wrappers no oficiales y automatizaciones con navegador/captcha son frágiles y aumentan el riesgo de incumplir términos o perder producción.
 
-**Fondos:** Nano Banana Pro vía Gemini API (`gemini-3-pro-image-preview`).
+**Fondos:** Nano Banana 2 vía Gemini API (`gemini-3.1-flash-image-preview`).
 
 **Render:** FFmpeg con audio pre-normalizado a WAV para concatenación robusta y vídeo H.264 de imágenes fijas a 1 FPS por defecto.
 
