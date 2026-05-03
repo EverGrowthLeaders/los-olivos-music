@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 from typing import Any
 
@@ -163,12 +164,29 @@ def validate_spec(spec: JobSpec) -> None:
     _ = spec.video.width_height
 
 
+def _load_category_file(path: Path) -> dict[str, dict[str, Any]]:
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a mapping")
+    return data
+
+
+def _default_custom_categories_path() -> Path:
+    if custom_path := os.getenv("YMF_CUSTOM_CATEGORIES_FILE"):
+        return Path(custom_path)
+    if Path("/app").exists():
+        return Path("/app/.secrets/categories.custom.yaml")
+    return project_root() / ".secrets" / "categories.custom.yaml"
+
+
 def load_categories(path: Path | None = None) -> dict[str, dict[str, Any]]:
     categories_path = path or project_root() / "config" / "categories.yaml"
-    data = yaml.safe_load(categories_path.read_text(encoding="utf-8")) or {}
-    if not isinstance(data, dict):
-        raise ValueError("categories.yaml must contain a mapping")
-    return data
+    categories = _load_category_file(categories_path)
+    if path is None:
+        categories.update(_load_category_file(_default_custom_categories_path()))
+    return categories
 
 
 def category_for(spec: JobSpec, categories: dict[str, dict[str, Any]]) -> dict[str, Any]:

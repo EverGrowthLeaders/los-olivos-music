@@ -128,6 +128,7 @@ def _merged_env(tenant_id: str | None = DEFAULT_TENANT_ID) -> dict[str, str]:
     tenant_id = _tenant_id(tenant_id)
     env = os.environ.copy()
     env.update(_load_env(tenant_id))
+    env["YMF_CUSTOM_CATEGORIES_FILE"] = str(CUSTOM_CATEGORIES_FILE)
     if tenant_id != DEFAULT_TENANT_ID and "YOUTUBE_TOKEN_FILE" not in _tenant_env_overrides(tenant_id):
         env["YOUTUBE_TOKEN_FILE"] = str((_tenant_root(tenant_id) / "youtube-token.json").resolve())
     return env
@@ -317,16 +318,18 @@ def _youtube_client_config(env: dict[str, str], redirect_uri: str) -> dict | Non
 
 
 def _load_categories() -> dict:
-    categories: dict = {}
-    if CATEGORIES_FILE.exists():
-        with open(CATEGORIES_FILE, encoding="utf-8") as f:
-            categories.update(yaml.safe_load(f) or {})
-    if CUSTOM_CATEGORIES_FILE.exists():
-        with open(CUSTOM_CATEGORIES_FILE, encoding="utf-8") as f:
-            custom = yaml.safe_load(f) or {}
-            if isinstance(custom, dict):
-                categories.update(custom)
-    return categories
+    from yt_music_factory.config import load_categories
+
+    env_key = "YMF_CUSTOM_CATEGORIES_FILE"
+    previous = os.environ.get(env_key)
+    os.environ[env_key] = str(CUSTOM_CATEGORIES_FILE)
+    try:
+        return load_categories()
+    finally:
+        if previous is None:
+            os.environ.pop(env_key, None)
+        else:
+            os.environ[env_key] = previous
 
 
 def _load_custom_categories() -> dict:

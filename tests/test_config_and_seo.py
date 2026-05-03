@@ -78,3 +78,22 @@ def test_account_style_no_longer_adds_global_music_direction():
 
     assert "Focus channel" in prompt
     assert "Sonic identity" not in prompt
+
+
+def test_load_categories_merges_custom_file(tmp_path, monkeypatch):
+    custom = tmp_path / "categories.custom.yaml"
+    custom.write_text(
+        """
+deep_trading:
+  label: Deep Trading
+  music_prompt: Instrumental trading focus music
+  image_prompt: Abstract market background
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("YMF_CUSTOM_CATEGORIES_FILE", str(custom))
+
+    categories = load_categories()
+
+    assert "focus_lofi" in categories
+    assert categories["deep_trading"]["music_prompt"] == "Instrumental trading focus music"
