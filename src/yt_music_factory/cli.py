@@ -128,10 +128,7 @@ def doctor_report() -> dict[str, str | bool]:
             report[binary] = require_binary(binary)
         except Exception as exc:  # noqa: BLE001
             report[binary] = f"missing: {exc}"
-    report["ELEVENLABS_API_KEY"] = bool(os.getenv("ELEVENLABS_API_KEY"))
     report["GEMINI_API_KEY"] = bool(os.getenv("GEMINI_API_KEY"))
-    report["MUBERT_CUSTOMER_ID"] = bool(os.getenv("MUBERT_CUSTOMER_ID"))
-    report["MUBERT_ACCESS_TOKEN"] = bool(os.getenv("MUBERT_ACCESS_TOKEN"))
     client_secrets = Path(os.getenv("YOUTUBE_CLIENT_SECRETS", "client_secret.json"))
     report["YOUTUBE_CLIENT_SECRETS"] = str(client_secrets) if client_secrets.exists() else False
     report["YOUTUBE_CLIENT_ID"] = bool(os.getenv("YOUTUBE_CLIENT_ID"))

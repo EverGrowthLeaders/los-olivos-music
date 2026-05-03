@@ -23,14 +23,13 @@ class JobConfig:
 
 @dataclass(slots=True)
 class MusicConfig:
-    provider: str = "elevenlabs"
+    provider: str = "local"
     prompt: str | None = None
     track_count: int = 12
     track_duration_seconds: int = 300
     instrumental: bool = True
     output_format: str = "mp3"
     model: str | None = None
-    playlist_index: str | None = None
     bitrate: int = 192
     intensity: str = "medium"
     mode: str = "track"

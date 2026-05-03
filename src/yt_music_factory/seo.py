@@ -174,12 +174,6 @@ def build_local_metadata(
         spec.music.track_duration_seconds,
         spec.job.target_seconds,
     )
-    provider_note = ""
-    if spec.music.provider == "elevenlabs":
-        provider_note = "\nMusic attribution: Created in collaboration with ElevenLabs."
-    elif spec.music.provider == "mubert":
-        provider_note = "\nMusic generated/licensed through the configured Mubert API plan."
-
     disclosure = (
         "\nDisclosure: this video uses synthetically generated or AI-assisted music and "
         "AI-assisted background artwork."
@@ -198,7 +192,7 @@ Chapters:
 {tracklist or "Continuous original mix"}
 
 Visuals: AI-assisted still artwork generated for this upload.
-Audio: original AI-assisted music generated for this upload.{provider_note}{disclosure}
+Audio: original AI-assisted music generated for this upload.{disclosure}
 
 No artist voice, song title, label, or copyrighted lyric references were intentionally used in the prompts.
 

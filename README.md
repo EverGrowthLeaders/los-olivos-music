@@ -14,13 +14,11 @@ El pipeline está pensado para funcionar en producción con claves reales, pero 
 
 ## Decisión técnica
 
-**Proveedor principal de música recomendado:** ElevenLabs Music API.
+**Proveedor principal de música recomendado:** Google Lyria vía Gemini API.
 
-Motivo: tiene API oficial, salida con voces o instrumental, control por prompt, límites claros por plan y uso comercial online/offline según plan. El código evita referencias a artistas, canciones, sellos o letras existentes y bloquea prompts con frases de imitación como `in the style of`, `sounds like`, covers, remixes o voces de terceros.
+Motivo: encaja con el stack Gemini del proyecto, permite generación musical original por prompt y mantiene una integración directa con el resto del pipeline. El código evita referencias a artistas, canciones, sellos o letras existentes y bloquea prompts con frases de imitación como `in the style of`, `sounds like`, covers, remixes o voces de terceros.
 
-**Proveedor secundario:** Mubert API.
-
-Motivo: más adecuado para música instrumental, lo-fi, ambient, streaming/background y loops. Menos flexible para canciones con voces, pero suele ser práctico para canales de fondo. Para producción estable, usa `playlist_index`; la generación por prompt puede requerir activación contractual y webhook según licencia.
+**Fallback local/assets:** el proveedor `local` sirve para pruebas sin gastar créditos, y `assets` permite usar audio propio.
 
 **Suno:** no se automatiza en este proyecto. Los wrappers no oficiales y automatizaciones con navegador/captcha son frágiles y aumentan el riesgo de incumplir términos o perder producción.
 
@@ -103,16 +101,6 @@ ymf render examples/my_video.yaml --workdir runs --no-upload
 
 ---
 
-## Alternativa Mubert por playlist
-
-```bash
-ymf render examples/mubert_playlist_1h.yaml --workdir runs --no-upload
-```
-
-Cambia `music.playlist_index` por un índice disponible en tu licencia de Mubert.
-
----
-
 ## Usar assets manuales en vez de generar música/imágenes
 
 ```bash
@@ -179,7 +167,7 @@ job:
   target_minutes: 60
 category_key: focus_lofi
 music:
-  provider: lyria     # local | lyria | elevenlabs | mubert | assets
+  provider: lyria     # local | lyria | assets
   model: lyria-realtime-exp
   track_count: 20
   track_duration_seconds: 180
@@ -254,10 +242,9 @@ src/yt_music_factory/
   ffmpeg.py               # Concatenación, loop y render bajo CPU
   seo.py                  # Metadata SEO local/Gemini
   youtube.py              # Upload resumible con OAuth
-  providers/music/        # local, ElevenLabs, Mubert
+  providers/music/        # local, Lyria
   providers/image/        # local, Gemini/Nano Banana 2
 config/categories.yaml
 examples/*.yaml
-  mubert_playlist_1h.yaml  # alternativa instrumental por playlist
 tests/*.py
 ```

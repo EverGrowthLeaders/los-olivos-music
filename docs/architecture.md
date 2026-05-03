@@ -5,7 +5,7 @@
 ```text
 YAML spec
   ├─ category config
-  ├─ music provider: assets | local | elevenlabs | mubert
+  ├─ music provider: assets | local | lyria
   ├─ image provider: assets | local | gemini
   ├─ SEO metadata: local | gemini
   ├─ FFmpeg audio concat + target duration

@@ -14,7 +14,6 @@
 - Descripción con disclosure automático.
 - Prompts de categoría sin nombres de artistas ni canciones.
 - Títulos y tags generados con límites.
-- Atribución automática de ElevenLabs en descripción cuando se usa ese proveedor.
 - Subida privada por defecto.
 - `result.json` y `youtube_metadata.json` persistidos por job.
 

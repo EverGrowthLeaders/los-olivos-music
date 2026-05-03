@@ -6,9 +6,6 @@ services:
     restart: unless-stopped
     environment:
       YMF_WORKDIR: /app/runs
-      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
-      MUBERT_CUSTOMER_ID: ${MUBERT_CUSTOMER_ID:-}
-      MUBERT_ACCESS_TOKEN: ${MUBERT_ACCESS_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MUSIC_MODEL: ${GEMINI_MUSIC_MODEL:-lyria-realtime-exp}
       GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-3.1-flash-image-preview}
@@ -40,9 +37,6 @@ services:
       - "8080:8080"
     environment:
       YMF_WORKDIR: /app/runs
-      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
-      MUBERT_CUSTOMER_ID: ${MUBERT_CUSTOMER_ID:-}
-      MUBERT_ACCESS_TOKEN: ${MUBERT_ACCESS_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MUSIC_MODEL: ${GEMINI_MUSIC_MODEL:-lyria-realtime-exp}
       GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-3.1-flash-image-preview}

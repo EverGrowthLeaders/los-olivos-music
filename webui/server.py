@@ -38,9 +38,6 @@ _scheduler_task: asyncio.Task | None = None
 _running_schedule_ids: set[tuple[str, str]] = set()
 
 SETTING_KEYS = [
-    "ELEVENLABS_API_KEY",
-    "MUBERT_CUSTOMER_ID",
-    "MUBERT_ACCESS_TOKEN",
     "GEMINI_API_KEY",
     "GEMINI_MUSIC_MODEL",
     "GEMINI_IMAGE_MODEL",
@@ -469,7 +466,7 @@ def _schedule_spec_yaml(schedule: dict, tenant_id: str | None = DEFAULT_TENANT_I
             "resolution": "1920x1080",
             "fps": 1,
             "visual_mode": "slideshow",
-            "image_duration_seconds": 60,
+            "image_duration_seconds": int(schedule.get("image_duration") or 60),
             "video_preset": "ultrafast",
             "audio_bitrate": "128k",
             "normalize_audio": False,

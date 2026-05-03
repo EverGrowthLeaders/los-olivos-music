@@ -302,7 +302,7 @@
 
           <div>
             <label class="block text-xs font-medium text-zinc-400 mb-2">Proveedor de música</label>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div class="grid grid-cols-2 gap-2">
               <template x-for="p in musicProviders" :key="p.value">
                 <button @click="jobForm.music_provider = p.value"
                   class="border rounded-lg px-3 py-3 text-sm transition-all text-left"
@@ -327,12 +327,6 @@
               <input x-model.number="jobForm.track_duration" type="number" min="10" max="600"
                 class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
             </div>
-          </div>
-
-          <div x-show="jobForm.music_provider === 'mubert'">
-            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Índice de playlist Mubert <span class="text-zinc-600">(opcional)</span></label>
-            <input x-model="jobForm.mubert_playlist" type="text" placeholder="Vacío = generación por prompt de texto"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
           </div>
 
           <div>
@@ -666,62 +660,249 @@
     </section>
 
 
+    <!-- ══════════════════════════════ AUTOMATIZACIÓN ══════════════════════════════ -->
+    <section x-show="tab === 'auto'">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-xl font-semibold text-white">Automatización</h1>
+          <p class="text-sm text-zinc-500 mt-0.5">Genera y sube videos en automático según la estética de cuenta.</p>
+        </div>
+        <button @click="loadSchedules()"
+          class="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors">
+          <span class="text-base leading-none">↻</span> Actualizar
+        </button>
+      </div>
+
+      <!-- Creation form -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
+        <p class="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Nueva programación</p>
+
+        <!-- Row 1: scheduling fields -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-12 gap-3 mb-3">
+          <div class="col-span-2 lg:col-span-3">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Nombre</label>
+            <input x-model="scheduleForm.name" type="text" placeholder="Lofi diario"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Categoría</label>
+            <select x-model="scheduleForm.category_key"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+              <template x-for="(cat, key) in categories" :key="key">
+                <option :value="key" x-text="cat.label"></option>
+              </template>
+            </select>
+          </div>
+          <div class="lg:col-span-1">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Cada</label>
+            <input x-model.number="scheduleForm.frequency_value" type="number" min="1"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Unidad</label>
+            <select x-model="scheduleForm.frequency_unit"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+              <option value="minutes">minutos</option>
+              <option value="hours">horas</option>
+              <option value="days">días</option>
+            </select>
+          </div>
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Hora <span class="text-zinc-700">(si es diario)</span></label>
+            <input x-model="scheduleForm.run_time" type="time"
+              :disabled="scheduleForm.frequency_unit !== 'days'"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white disabled:opacity-30 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Duración <span class="text-zinc-700">(min)</span></label>
+            <input x-model.number="scheduleForm.target_minutes" type="number" min="1"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+        </div>
+
+        <!-- Row 2: production fields + actions -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-12 gap-3 items-end">
+          <div class="col-span-2 lg:col-span-3">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Semilla de título</label>
+            <input x-model="scheduleForm.title_seed" type="text" placeholder="deep focus session"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div class="lg:col-span-1">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Pistas</label>
+            <input x-model.number="scheduleForm.track_count" type="number" min="1"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div class="lg:col-span-1">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Seg/pista</label>
+            <input x-model.number="scheduleForm.track_duration" type="number" min="10"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div class="lg:col-span-1">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Imgs</label>
+            <input x-model.number="scheduleForm.images_count" type="number" min="1" max="20"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div class="lg:col-span-1">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Seg/img</label>
+            <input x-model.number="scheduleForm.image_duration" type="number" min="1" max="300"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Privacidad</label>
+            <select x-model="scheduleForm.privacy_status"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+              <option value="private">Privado</option>
+              <option value="unlisted">No listado</option>
+              <option value="public">Público</option>
+            </select>
+          </div>
+          <div class="lg:col-span-1 flex flex-col gap-1.5">
+            <label class="block text-xs font-medium text-zinc-500">Subir</label>
+            <button @click="scheduleForm.upload = !scheduleForm.upload"
+              class="w-10 h-6 rounded-full relative transition-colors flex-shrink-0"
+              :class="scheduleForm.upload ? 'bg-emerald-600' : 'bg-zinc-700'">
+              <span class="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
+                :class="scheduleForm.upload ? 'translate-x-4' : 'translate-x-0.5'"></span>
+            </button>
+          </div>
+          <div class="lg:col-span-2">
+            <button @click="createSchedule()" :disabled="isSavingSchedule"
+              class="w-full bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+              <span x-text="isSavingSchedule ? 'Creando…' : '+ Crear'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <template x-if="schedules.length === 0">
+        <div class="flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-xl py-14 text-center">
+          <div class="text-3xl mb-3 opacity-30">⏱</div>
+          <p class="text-sm font-medium text-zinc-500">Sin programaciones</p>
+          <p class="text-xs text-zinc-700 mt-1">Crea una nueva arriba para empezar.</p>
+        </div>
+      </template>
+
+      <!-- Schedule cards -->
+      <div class="space-y-3">
+        <template x-for="schedule in schedules" :key="schedule.id">
+          <div class="bg-zinc-950 border rounded-xl overflow-hidden transition-colors"
+            :class="{
+              'border-emerald-800/60': schedule.enabled && schedule.last_status !== 'error',
+              'border-red-900/60':  schedule.last_status === 'error',
+              'border-zinc-800':    !schedule.enabled && schedule.last_status !== 'error'
+            }">
+
+            <!-- Main row -->
+            <div class="flex items-start gap-4 p-4">
+
+              <!-- Toggle -->
+              <button @click="toggleSchedule(schedule)"
+                class="mt-0.5 flex-shrink-0 w-10 h-6 rounded-full relative transition-colors"
+                :class="schedule.enabled ? 'bg-emerald-600' : 'bg-zinc-700'">
+                <span class="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
+                  :class="schedule.enabled ? 'translate-x-4' : 'translate-x-0.5'"></span>
+              </button>
+
+              <!-- Info -->
+              <div class="flex-1 min-w-0">
+                <!-- Title row -->
+                <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                  <span class="text-sm font-semibold text-white truncate"
+                    x-text="schedule.name || 'Automatización'"></span>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400"
+                    x-text="categories[schedule.category_key]?.label || schedule.category_key"></span>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-900 text-zinc-500"
+                    x-text="(schedule.target_minutes || 60) + ' min'"></span>
+                  <!-- Status badge -->
+                  <template x-if="schedule.last_status === 'running'">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-950/60 text-blue-400 border border-blue-900/40">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span> En curso
+                    </span>
+                  </template>
+                  <template x-if="schedule.last_status === 'success'">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-900/40">
+                      ✓ Completado
+                    </span>
+                  </template>
+                  <template x-if="schedule.last_status === 'error'">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-950/60 text-red-400 border border-red-900/40">
+                      ✕ Error
+                    </span>
+                  </template>
+                </div>
+
+                <!-- Meta row -->
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+                  <span>
+                    <span class="text-zinc-600">↺</span>
+                    <span x-text="'Cada ' + schedule.frequency_value + ' ' + unitLabel(schedule.frequency_unit)"></span>
+                    <template x-if="schedule.frequency_unit === 'days' && schedule.run_time">
+                      <span x-text="' a las ' + schedule.run_time"></span>
+                    </template>
+                  </span>
+                  <span>
+                    <span class="text-zinc-600">⏭</span>
+                    <span x-text="'Próxima: ' + formatDate(schedule.next_run_at)"></span>
+                  </span>
+                  <template x-if="schedule.last_finished_at">
+                    <span>
+                      <span class="text-zinc-600">✓</span>
+                      <span x-text="'Última: ' + formatDate(schedule.last_finished_at)"></span>
+                    </span>
+                  </template>
+                  <span>
+                    <span class="text-zinc-600">🎞</span>
+                    <span x-text="(schedule.images_count || 1) + ' img · ' + (schedule.image_duration || 60) + 's'"></span>
+                  </span>
+                  <template x-if="schedule.upload">
+                    <span class="text-emerald-600 font-medium">↑ YouTube</span>
+                  </template>
+                  <template x-if="!schedule.upload">
+                    <span class="text-zinc-700">Sin subida</span>
+                  </template>
+                  <span x-text="{ private: '🔒 Privado', unlisted: '🔗 No listado', public: '🌐 Público' }[schedule.privacy_status] || ''"></span>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <button @click="runScheduleNow(schedule)"
+                  class="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  ↺ Lanzar
+                </button>
+                <button @click="deleteSchedule(schedule)"
+                  class="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-950/40 transition-colors text-sm">
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <!-- Footer: last run link -->
+            <template x-if="schedule.last_slug">
+              <div class="border-t border-zinc-900 px-4 py-2 flex items-center justify-between">
+                <code class="text-xs text-zinc-600 font-mono" x-text="schedule.last_slug"></code>
+                <button @click="tab = 'historial'; loadRuns()"
+                  class="text-xs text-zinc-500 hover:text-violet-400 transition-colors">
+                  Ver en historial →
+                </button>
+              </div>
+            </template>
+
+          </div>
+        </template>
+      </div>
+    </section>
+
+
     <!-- ══════════════════════════════ CONFIGURACIÓN ══════════════════════════════ -->
     <section x-show="tab === 'config'">
 
       <div class="mb-6">
         <h1 class="text-xl font-semibold">Configuración</h1>
         <p class="text-sm text-zinc-500 mt-0.5">API keys y parámetros del sistema. Se guardan en el archivo <code class="text-zinc-400">.env</code></p>
-      </div>
-
-      <!-- ElevenLabs -->
-      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-3">
-        <div class="flex items-center gap-2 mb-4">
-          <div class="w-6 h-6 rounded bg-orange-900/50 flex items-center justify-center text-orange-400 text-xs font-bold">E</div>
-          <h2 class="text-sm font-semibold">ElevenLabs</h2>
-          <span class="text-xs text-zinc-600">Proveedor de música</span>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-zinc-500 mb-1.5">API Key</label>
-          <div class="relative">
-            <input x-model="settingsForm.ELEVENLABS_API_KEY"
-              :type="showKeys.el ? 'text' : 'password'"
-              placeholder="sk_…"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 pr-20 text-sm text-white placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-500 transition-colors">
-            <button @click="showKeys.el = !showKeys.el"
-              class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-              x-text="showKeys.el ? 'Ocultar' : 'Mostrar'">
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Mubert -->
-      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-3">
-        <div class="flex items-center gap-2 mb-4">
-          <div class="w-6 h-6 rounded bg-blue-900/50 flex items-center justify-center text-blue-400 text-xs font-bold">M</div>
-          <h2 class="text-sm font-semibold">Mubert</h2>
-          <span class="text-xs text-zinc-600">Proveedor de música</span>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Customer ID</label>
-            <input x-model="settingsForm.MUBERT_CUSTOMER_ID" type="text"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-violet-500 transition-colors">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Access Token</label>
-            <div class="relative">
-              <input x-model="settingsForm.MUBERT_ACCESS_TOKEN"
-                :type="showKeys.mubert ? 'text' : 'password'"
-                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 pr-20 text-sm text-white font-mono focus:outline-none focus:border-violet-500 transition-colors">
-              <button @click="showKeys.mubert = !showKeys.mubert"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-                x-text="showKeys.mubert ? 'Ocultar' : 'Mostrar'">
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Gemini -->
@@ -880,138 +1061,21 @@
         </div>
       </div>
 
-      <!-- Automation schedules -->
-      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
-        <div class="flex items-center justify-between gap-3 mb-4">
-          <div class="flex items-center gap-2">
-            <div class="w-6 h-6 rounded bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-xs font-bold">⏱</div>
-            <div>
-              <h2 class="text-sm font-semibold">Ejecuciones automáticas</h2>
-              <p class="text-xs text-zinc-600 mt-0.5">Genera y sube videos en automático con la estética de cuenta.</p>
+      <!-- Automation shortcut -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-emerald-900/50 flex items-center justify-center text-emerald-400 text-base">⏱</div>
+          <div>
+            <div class="text-sm font-semibold">Ejecuciones automáticas</div>
+            <div class="text-xs text-zinc-500 mt-0.5">
+              <span x-text="schedules.length === 0 ? 'Sin automatizaciones configuradas' : schedules.length + ' automatización' + (schedules.length === 1 ? '' : 'es') + ' · ' + schedules.filter(s => s.enabled).length + ' activa' + (schedules.filter(s => s.enabled).length === 1 ? '' : 's')"></span>
             </div>
           </div>
-          <button @click="loadSchedules()"
-            class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
-            ↻
-          </button>
         </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-7 gap-3 mb-4">
-          <div class="lg:col-span-2">
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Nombre</label>
-            <input x-model="scheduleForm.name" type="text" placeholder="Trading diario"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Categoría</label>
-            <select x-model="scheduleForm.category_key"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
-              <template x-for="(cat, key) in categories" :key="key">
-                <option :value="key" x-text="cat.label"></option>
-              </template>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Cada</label>
-            <input x-model.number="scheduleForm.frequency_value" type="number" min="1"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Unidad</label>
-            <select x-model="scheduleForm.frequency_unit"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
-              <option value="minutes">minutos</option>
-              <option value="hours">horas</option>
-              <option value="days">días</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Hora</label>
-            <input x-model="scheduleForm.run_time" type="time"
-              :disabled="scheduleForm.frequency_unit !== 'days'"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white disabled:text-zinc-700 disabled:border-zinc-900 focus:outline-none focus:border-violet-500 transition-colors">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Duración</label>
-            <input x-model.number="scheduleForm.target_minutes" type="number" min="1"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-6 gap-3 mb-4">
-          <div class="lg:col-span-2">
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Semilla de título</label>
-            <input x-model="scheduleForm.title_seed" type="text" placeholder="deep focus trading session"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Pistas</label>
-            <input x-model.number="scheduleForm.track_count" type="number" min="1"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Seg/pista</label>
-            <input x-model.number="scheduleForm.track_duration" type="number" min="10"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Privacidad</label>
-            <select x-model="scheduleForm.privacy_status"
-              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
-              <option value="private">Privado</option>
-              <option value="unlisted">No listado</option>
-              <option value="public">Público</option>
-            </select>
-          </div>
-          <div class="flex items-end">
-            <button @click="createSchedule()" :disabled="isSavingSchedule"
-              class="w-full bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-              Añadir
-            </button>
-          </div>
-        </div>
-
-        <template x-if="schedules.length === 0">
-          <div class="border border-dashed border-zinc-800 rounded-lg p-4 text-sm text-zinc-600">
-            No hay ejecuciones automáticas configuradas.
-          </div>
-        </template>
-
-        <div class="space-y-2">
-          <template x-for="schedule in schedules" :key="schedule.id">
-            <div class="bg-zinc-950 border border-zinc-800 rounded-lg p-4 flex flex-wrap items-center gap-3 justify-between">
-              <div>
-                <div class="flex items-center gap-2">
-                  <button @click="toggleSchedule(schedule)" class="w-8 h-5 rounded-full relative transition-colors"
-                    :class="schedule.enabled ? 'bg-emerald-600' : 'bg-zinc-700'">
-                    <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform"
-                      :class="schedule.enabled ? 'translate-x-3.5' : 'translate-x-0.5'"></span>
-                  </button>
-                  <div class="text-sm font-medium" x-text="schedule.name || 'Automatización'"></div>
-                  <span class="text-xs text-zinc-600" x-text="schedule.category_key"></span>
-                </div>
-                <div class="text-xs text-zinc-600 mt-1">
-                  <span x-text="'Cada ' + schedule.frequency_value + ' ' + unitLabel(schedule.frequency_unit)"></span>
-                  <span x-show="schedule.run_time && schedule.frequency_unit === 'days'" x-text="' a las ' + schedule.run_time"></span>
-                  <span> · </span>
-                  <span x-text="'Próxima: ' + formatDate(schedule.next_run_at)"></span>
-                  <span x-show="schedule.last_status"> · </span>
-                  <span x-show="schedule.last_status" x-text="'Última: ' + schedule.last_status"></span>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <button @click="runScheduleNow(schedule)"
-                  class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-                  Lanzar ahora
-                </button>
-                <button @click="deleteSchedule(schedule)"
-                  class="bg-red-950/60 hover:bg-red-900/70 text-red-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-                  Borrar
-                </button>
-              </div>
-            </div>
-          </template>
-        </div>
+        <button @click="tab = 'auto'; loadSchedules()"
+          class="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          Gestionar →
+        </button>
       </div>
 
       <!-- Save button -->
@@ -1038,6 +1102,7 @@
         { id: 'dashboard', label: 'Dashboard' },
         { id: 'nuevo',     label: 'Nuevo Video' },
         { id: 'historial', label: 'Historial' },
+        { id: 'auto',      label: 'Automatización' },
         { id: 'config',    label: 'Configuración' },
       ],
 
@@ -1072,7 +1137,6 @@
         music_provider: 'local',
         track_count:    4,
         track_duration: 180,
-        mubert_playlist:'',
         instrumental:   true,
         images_provider:'local',
         images_count:   4,
@@ -1089,8 +1153,6 @@
       musicProviders: [
         { value: 'local',      label: 'Local',      note: 'Sin API key' },
         { value: 'lyria',      label: 'Lyria',      note: 'Google Gemini' },
-        { value: 'elevenlabs', label: 'ElevenLabs', note: 'Requiere key' },
-        { value: 'mubert',     label: 'Mubert',     note: 'Requiere key' },
       ],
 
       imageProviders: [
@@ -1108,9 +1170,7 @@
       },
 
       apiStatusKeys: {
-        ELEVENLABS_API_KEY: 'ElevenLabs',
         GEMINI_API_KEY:     'Gemini',
-        MUBERT_ACCESS_TOKEN:'Mubert',
         YOUTUBE_CLIENT_SECRETS: 'YouTube',
       },
 
@@ -1122,7 +1182,7 @@
 
       // Settings form
       settingsForm: {},
-      showKeys: { el: false, mubert: false, gemini: false },
+      showKeys: { gemini: false },
       settingsSaved: false,
       isSaving: false,
       isSavingSchedule: false,
@@ -1137,6 +1197,7 @@
         track_count: 4,
         track_duration: 180,
         images_count: 1,
+        image_duration: 60,
         privacy_status: 'private',
         upload: true,
         enabled: true,
@@ -1464,10 +1525,6 @@
           `  instrumental: ${f.instrumental}`,
           `  output_format: wav`,
         ];
-
-        if (f.music_provider === 'mubert' && f.mubert_playlist) {
-          lines.push(`  playlist_index: ${f.mubert_playlist}`);
-        }
 
         lines.push(
           ``,

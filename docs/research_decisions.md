@@ -15,8 +15,7 @@ Create a reproducible pipeline for long-form YouTube music videos with minimal m
 | Area | Decision | Why |
 | --- | --- | --- |
 | Primary music provider | Google Lyria 3 Pro via Gemini API | Official API, strong full-song structure, 44.1/48 kHz stereo output depending on endpoint/docs, best fit when the project already uses Gemini/Nano Banana. |
-| Fallback music provider | ElevenLabs Music API | Official API, longer single-song duration control, good backup if Lyria quota/preview availability is constrained. |
-| Secondary music provider | Mubert API | Useful for instrumental/background/lo-fi channels, especially when using licensed playlist indexes. |
+| Local fallback | Built-in local provider and user assets | Keeps tests, previews, and manual uploads working without paid music credits. |
 | Rejected automation | Unofficial Suno wrappers/browser automation | No official public API path was found; captcha/browser automation is fragile and terms-sensitive. |
 | Visual provider | Gemini API / Nano Banana 2 | Official API path and high-throughput model ID for image generation. |
 | Render engine | FFmpeg | Stable, scriptable, cheap CPU usage with static images and low FPS. |
@@ -25,8 +24,7 @@ Create a reproducible pipeline for long-form YouTube music videos with minimal m
 ## Production stance
 
 - Use `lyria` as the default for quality and direct prompt-to-track control when Gemini API access is available.
-- Use `elevenlabs` as the fallback when you need longer single generations or Lyria preview/quota access is constrained.
-- Use `mubert` when you have a Mubert license with track generation enabled and known `playlist_index` values.
+- Use `local` or `assets` when you need a dry run, a smoke test, or manually supplied audio.
 - Keep uploads private first. Review Content ID, audio quality, metadata, thumbnail and synthetic-content flags before publication.
 - Keep every generated video materially distinct. Do not publish near-duplicate hour-long templates with only tiny prompt changes.
 
