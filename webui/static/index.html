@@ -118,7 +118,7 @@
         <div class="flex items-start justify-between gap-4">
           <div>
             <div class="text-xs font-medium text-zinc-600 uppercase tracking-wider mb-2">Estética de cuenta</div>
-            <h2 class="text-base font-semibold" x-text="settings.CHANNEL_AESTHETIC ? 'Dirección creativa definida' : 'Sin estética global definida'"></h2>
+            <h2 class="text-base font-semibold" x-text="settings.CHANNEL_THEME || settings.CHANNEL_AESTHETIC ? (settings.CHANNEL_THEME || 'Dirección creativa definida') : 'Sin estética global definida'"></h2>
             <p class="text-sm text-zinc-500 mt-1 max-w-2xl"
               x-text="settings.CHANNEL_AESTHETIC || 'Define aquí el tono visual y sonoro para que todos los vídeos salgan con una identidad consistente.'">
             </p>
@@ -759,6 +759,12 @@
         </div>
         <div class="space-y-3">
           <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Temática de cuenta</label>
+            <input x-model="settingsForm.CHANNEL_THEME" type="text"
+              placeholder="Ej: trading macro, productividad profunda, sueño premium, meditación natural..."
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
             <label class="block text-xs font-medium text-zinc-500 mb-1.5">Dirección estética general</label>
             <textarea x-model="settingsForm.CHANNEL_AESTHETIC" rows="3"
               placeholder="Ej: minimalismo premium, concentración profunda, trading desk nocturno, sensación de precisión y calma..."
@@ -859,6 +865,133 @@
         </div>
       </div>
 
+      <!-- Automation schedules -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-xs font-bold">⏱</div>
+            <div>
+              <h2 class="text-sm font-semibold">Ejecuciones automáticas</h2>
+              <p class="text-xs text-zinc-600 mt-0.5">Genera y sube videos en automático con la estética de cuenta.</p>
+            </div>
+          </div>
+          <button @click="loadSchedules()"
+            class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+            ↻
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-6 gap-3 mb-4">
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Nombre</label>
+            <input x-model="scheduleForm.name" type="text" placeholder="Trading diario"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Categoría</label>
+            <select x-model="scheduleForm.category_key"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+              <template x-for="(cat, key) in categories" :key="key">
+                <option :value="key" x-text="cat.label"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Cada</label>
+            <input x-model.number="scheduleForm.frequency_value" type="number" min="1"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Unidad</label>
+            <select x-model="scheduleForm.frequency_unit"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+              <option value="minutes">minutos</option>
+              <option value="hours">horas</option>
+              <option value="days">días</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Duración</label>
+            <input x-model.number="scheduleForm.target_minutes" type="number" min="1"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-6 gap-3 mb-4">
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Semilla de título</label>
+            <input x-model="scheduleForm.title_seed" type="text" placeholder="deep focus trading session"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Pistas</label>
+            <input x-model.number="scheduleForm.track_count" type="number" min="1"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Seg/pista</label>
+            <input x-model.number="scheduleForm.track_duration" type="number" min="10"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Privacidad</label>
+            <select x-model="scheduleForm.privacy_status"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+              <option value="private">Privado</option>
+              <option value="unlisted">No listado</option>
+              <option value="public">Público</option>
+            </select>
+          </div>
+          <div class="flex items-end">
+            <button @click="createSchedule()" :disabled="isSavingSchedule"
+              class="w-full bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              Añadir
+            </button>
+          </div>
+        </div>
+
+        <template x-if="schedules.length === 0">
+          <div class="border border-dashed border-zinc-800 rounded-lg p-4 text-sm text-zinc-600">
+            No hay ejecuciones automáticas configuradas.
+          </div>
+        </template>
+
+        <div class="space-y-2">
+          <template x-for="schedule in schedules" :key="schedule.id">
+            <div class="bg-zinc-950 border border-zinc-800 rounded-lg p-4 flex flex-wrap items-center gap-3 justify-between">
+              <div>
+                <div class="flex items-center gap-2">
+                  <button @click="toggleSchedule(schedule)" class="w-8 h-5 rounded-full relative transition-colors"
+                    :class="schedule.enabled ? 'bg-emerald-600' : 'bg-zinc-700'">
+                    <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform"
+                      :class="schedule.enabled ? 'translate-x-3.5' : 'translate-x-0.5'"></span>
+                  </button>
+                  <div class="text-sm font-medium" x-text="schedule.name || 'Automatización'"></div>
+                  <span class="text-xs text-zinc-600" x-text="schedule.category_key"></span>
+                </div>
+                <div class="text-xs text-zinc-600 mt-1">
+                  <span x-text="'Cada ' + schedule.frequency_value + ' ' + unitLabel(schedule.frequency_unit)"></span>
+                  <span> · </span>
+                  <span x-text="'Próxima: ' + formatDate(schedule.next_run_at)"></span>
+                  <span x-show="schedule.last_status"> · </span>
+                  <span x-show="schedule.last_status" x-text="'Última: ' + schedule.last_status"></span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button @click="runScheduleNow(schedule)"
+                  class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  Lanzar ahora
+                </button>
+                <button @click="deleteSchedule(schedule)"
+                  class="bg-red-950/60 hover:bg-red-900/70 text-red-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  Borrar
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
       <!-- Save button -->
       <div class="flex items-center justify-between">
         <div x-show="settingsSaved" class="flex items-center gap-2 text-green-400 text-sm">
@@ -890,6 +1023,7 @@
       categories: {},
       settings:   {},
       runs:       [],
+      schedules:  [],
       youtubeStatus: {},
       isConnectingYoutube: false,
       youtubeOauthError: '',
@@ -966,6 +1100,21 @@
       showKeys: { el: false, mubert: false, gemini: false },
       settingsSaved: false,
       isSaving: false,
+      isSavingSchedule: false,
+      scheduleForm: {
+        name: '',
+        category_key: 'focus_lofi',
+        title_seed: '',
+        frequency_value: 24,
+        frequency_unit: 'hours',
+        target_minutes: 60,
+        track_count: 4,
+        track_duration: 180,
+        images_count: 1,
+        privacy_status: 'private',
+        upload: true,
+        enabled: true,
+      },
 
       // ── Init ──
       async init() {
@@ -974,6 +1123,7 @@
           this.loadCategories(),
           this.loadSettings(),
           this.loadRuns(),
+          this.loadSchedules(),
           this.loadYoutubeStatus(),
         ]);
         window.addEventListener('message', (event) => {
@@ -1072,6 +1222,7 @@
       channelStyle() {
         const form = this.settingsForm || {};
         return {
+          theme:          this.cleanMultiline(form.CHANNEL_THEME),
           aesthetic:      this.cleanMultiline(form.CHANNEL_AESTHETIC),
           visual_style:   this.cleanMultiline(form.CHANNEL_VISUAL_STYLE),
           color_palette:  this.cleanMultiline(form.CHANNEL_COLOR_PALETTE),
@@ -1139,6 +1290,70 @@
         } catch { /* ignore */ }
       },
 
+      async loadSchedules() {
+        try {
+          const r = await fetch('/api/schedules');
+          this.schedules = await r.json();
+        } catch { /* ignore */ }
+      },
+
+      schedulePayload(extra = {}) {
+        return {
+          ...this.scheduleForm,
+          music_provider: this.settings.GEMINI_API_KEY ? 'lyria' : 'local',
+          images_provider: this.settings.GEMINI_API_KEY ? 'gemini' : 'local',
+          seo_provider: this.settings.GEMINI_API_KEY ? 'gemini' : 'local',
+          seo_keyword: this.jobForm.seo_keyword,
+          ...extra,
+        };
+      },
+
+      async createSchedule() {
+        this.isSavingSchedule = true;
+        try {
+          const r = await fetch('/api/schedules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ schedule: this.schedulePayload() }),
+          });
+          if (r.ok) {
+            this.scheduleForm.name = '';
+            this.scheduleForm.title_seed = '';
+            await this.loadSchedules();
+          }
+        } catch { /* ignore */ }
+        this.isSavingSchedule = false;
+      },
+
+      async toggleSchedule(schedule) {
+        try {
+          await fetch('/api/schedules/' + schedule.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ schedule: { enabled: !schedule.enabled } }),
+          });
+          await this.loadSchedules();
+        } catch { /* ignore */ }
+      },
+
+      async runScheduleNow(schedule) {
+        try {
+          await fetch('/api/schedules/' + schedule.id + '/run', { method: 'POST' });
+          await this.loadSchedules();
+        } catch { /* ignore */ }
+      },
+
+      async deleteSchedule(schedule) {
+        try {
+          await fetch('/api/schedules/' + schedule.id, { method: 'DELETE' });
+          await this.loadSchedules();
+        } catch { /* ignore */ }
+      },
+
+      unitLabel(unit) {
+        return unit === 'minutes' ? 'minutos' : unit === 'days' ? 'días' : 'horas';
+      },
+
       // ── YAML generation ──
       generateYaml() {
         const f = this.jobForm;
@@ -1157,6 +1372,7 @@
           `category_key: ${f.category_key}`,
           ``,
           `channel_style:`,
+          ...this.yamlBlock('theme', style.theme, '  '),
           ...this.yamlBlock('aesthetic', style.aesthetic, '  '),
           ...this.yamlBlock('visual_style', style.visual_style, '  '),
           ...this.yamlBlock('color_palette', style.color_palette, '  '),

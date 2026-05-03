@@ -71,6 +71,7 @@ class SeoConfig:
 
 @dataclass(slots=True)
 class ChannelStyleConfig:
+    theme: str | None = None
     aesthetic: str | None = None
     visual_style: str | None = None
     color_palette: str | None = None
@@ -180,6 +181,8 @@ def category_for(spec: JobSpec, categories: dict[str, dict[str, Any]]) -> dict[s
 
 def channel_style_prompt(style: ChannelStyleConfig, *, media: str) -> str:
     lines: list[str] = []
+    if style.theme:
+        lines.append(f"Channel theme: {style.theme.strip()}")
     if style.aesthetic:
         lines.append(f"Channel aesthetic: {style.aesthetic.strip()}")
     if media == "image":

@@ -250,6 +250,7 @@ def build_gemini_metadata(
             for chapter in chapters or []
         ],
         "channel_style": {
+            "theme": spec.channel_style.theme,
             "aesthetic": spec.channel_style.aesthetic,
             "visual_style": spec.channel_style.visual_style,
             "color_palette": spec.channel_style.color_palette,

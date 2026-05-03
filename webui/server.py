@@ -4,10 +4,12 @@ import asyncio
 import secrets
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import yaml
@@ -20,7 +22,13 @@ from pydantic import BaseModel
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CATEGORIES_FILE = PROJECT_ROOT / "config" / "categories.yaml"
 ENV_FILE = Path(os.getenv("YMF_ENV_FILE", "/app/.secrets/.env" if Path("/app").exists() else str(PROJECT_ROOT / ".env")))
+SCHEDULES_FILE = Path(
+    os.getenv("YMF_SCHEDULES_FILE", "/app/.secrets/schedules.json" if Path("/app").exists() else str(PROJECT_ROOT / ".secrets" / "schedules.json"))
+)
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
+SCHEDULE_UNITS = {"minutes": 60, "hours": 3600, "days": 86400}
+_scheduler_task: asyncio.Task | None = None
+_running_schedule_ids: set[str] = set()
 
 SETTING_KEYS = [
     "ELEVENLABS_API_KEY",
@@ -36,6 +44,7 @@ SETTING_KEYS = [
     "YOUTUBE_CLIENT_SECRET",
     "YOUTUBE_REDIRECT_URI",
     "YMF_WORKDIR",
+    "CHANNEL_THEME",
     "CHANNEL_AESTHETIC",
     "CHANNEL_VISUAL_STYLE",
     "CHANNEL_COLOR_PALETTE",
@@ -230,6 +239,218 @@ def _youtube_client_config(env: dict[str, str], redirect_uri: str) -> dict | Non
     return None
 
 
+def _load_categories() -> dict:
+    if not CATEGORIES_FILE.exists():
+        return {}
+    with open(CATEGORIES_FILE, encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _load_schedules() -> list[dict]:
+    if not SCHEDULES_FILE.exists():
+        return []
+    try:
+        payload = json.loads(SCHEDULES_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    return payload if isinstance(payload, list) else []
+
+
+def _save_schedules(schedules: list[dict]) -> None:
+    SCHEDULES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SCHEDULES_FILE.write_text(json.dumps(schedules, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _interval_seconds(schedule: dict) -> int:
+    value = float(schedule.get("frequency_value") or 24)
+    unit = str(schedule.get("frequency_unit") or "hours")
+    return max(60, int(value * SCHEDULE_UNITS.get(unit, 3600)))
+
+
+def _safe_slug(value: str) -> str:
+    value = re.sub(r"[^a-zA-Z0-9\s-]", "", value or "").lower()
+    value = re.sub(r"\s+", "-", value).strip("-")
+    value = re.sub(r"-+", "-", value)
+    return value[:50] or "auto-video"
+
+
+def _channel_style_from_env(env: dict[str, str]) -> dict[str, str]:
+    return {
+        "theme": env.get("CHANNEL_THEME", ""),
+        "aesthetic": env.get("CHANNEL_AESTHETIC", ""),
+        "visual_style": env.get("CHANNEL_VISUAL_STYLE", ""),
+        "color_palette": env.get("CHANNEL_COLOR_PALETTE", ""),
+        "sonic_identity": env.get("CHANNEL_SONIC_IDENTITY", ""),
+        "avoid": env.get("CHANNEL_AVOID", ""),
+    }
+
+
+def _schedule_spec_yaml(schedule: dict) -> tuple[str, str]:
+    categories = _load_categories()
+    category_key = str(schedule.get("category_key") or "focus_lofi")
+    category = categories.get(category_key, {})
+    now = int(time.time())
+    suffix = secrets.token_hex(3)
+    title_seed = str(schedule.get("title_seed") or category.get("label") or "automatic music mix")
+    slug = f"{_safe_slug(title_seed)}-{now}-{suffix}"
+    env = _merged_env()
+    upload = bool(schedule.get("upload", True))
+    spec = {
+        "job": {
+            "slug": slug,
+            "title_seed": title_seed,
+            "language": "en",
+            "target_minutes": float(schedule.get("target_minutes") or 60),
+        },
+        "category_key": category_key,
+        "channel_style": _channel_style_from_env(env),
+        "music": {
+            "provider": schedule.get("music_provider") or ("lyria" if env.get("GEMINI_API_KEY") else "local"),
+            "prompt": category.get("music_prompt", ""),
+            "track_count": int(schedule.get("track_count") or 4),
+            "track_duration_seconds": int(schedule.get("track_duration") or 180),
+            "instrumental": True,
+            "output_format": "wav",
+        },
+        "images": {
+            "provider": schedule.get("images_provider") or ("gemini" if env.get("GEMINI_API_KEY") else "local"),
+            "prompt": category.get("image_prompt", ""),
+            "count": int(schedule.get("images_count") or 1),
+            "aspect_ratio": "16:9",
+            "image_size": "2K",
+        },
+        "video": {
+            "resolution": "1920x1080",
+            "fps": 1,
+            "visual_mode": "slideshow",
+            "image_duration_seconds": 60,
+            "video_preset": "ultrafast",
+            "audio_bitrate": "128k",
+            "normalize_audio": False,
+        },
+        "seo": {
+            "provider": schedule.get("seo_provider") or ("gemini" if env.get("GEMINI_API_KEY") else "local"),
+            "primary_keyword": schedule.get("seo_keyword") or (category.get("primary_keywords") or [""])[0],
+        },
+        "youtube": {
+            "upload": upload,
+            "privacy_status": schedule.get("privacy_status") or "private",
+            "contains_synthetic_media": True,
+            "made_for_kids": False,
+            "notify_subscribers": False,
+            "set_thumbnail": True,
+        },
+    }
+    return yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), slug
+
+
+def _update_schedule(schedule_id: str, updates: dict) -> dict | None:
+    schedules = _load_schedules()
+    updated = None
+    for schedule in schedules:
+        if schedule.get("id") == schedule_id:
+            schedule.update(updates)
+            updated = schedule
+            break
+    _save_schedules(schedules)
+    return updated
+
+
+async def _run_schedule(schedule: dict) -> None:
+    schedule_id = str(schedule.get("id"))
+    if schedule_id in _running_schedule_ids:
+        return
+    _running_schedule_ids.add(schedule_id)
+    spec_yaml, slug = _schedule_spec_yaml(schedule)
+    _update_schedule(
+        schedule_id,
+        {
+            "last_status": "running",
+            "last_started_at": time.time(),
+            "last_slug": slug,
+        },
+    )
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(spec_yaml)
+        tmp_path = f.name
+
+    try:
+        upload = bool(schedule.get("upload", True))
+        flag = "--upload" if upload else "--no-upload"
+        cmd = _ymf_cmd() + ["render", tmp_path, "--workdir", str(_get_workdir()), flag]
+        print(f"[scheduler] Starting '{schedule.get('name') or schedule_id}' as {slug}: {' '.join(cmd)}", flush=True)
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=str(PROJECT_ROOT),
+            env=_merged_env(),
+        )
+        assert process.stdout is not None
+        while True:
+            line = await process.stdout.readline()
+            if not line:
+                break
+            print(f"[schedule:{schedule_id}] {line.decode('utf-8', errors='replace').rstrip()}", flush=True)
+        await process.wait()
+        status = "success" if process.returncode == 0 else "error"
+        _update_schedule(
+            schedule_id,
+            {
+                "last_status": status,
+                "last_returncode": process.returncode,
+                "last_finished_at": time.time(),
+                "next_run_at": time.time() + _interval_seconds(schedule),
+                "last_slug": slug,
+            },
+        )
+        print(f"[scheduler] Finished '{schedule.get('name') or schedule_id}' status={status}", flush=True)
+    except Exception as exc:
+        _update_schedule(
+            schedule_id,
+            {
+                "last_status": "error",
+                "last_error": str(exc),
+                "last_finished_at": time.time(),
+                "next_run_at": time.time() + _interval_seconds(schedule),
+                "last_slug": slug,
+            },
+        )
+        print(f"[scheduler] Failed '{schedule.get('name') or schedule_id}': {exc}", flush=True)
+    finally:
+        _running_schedule_ids.discard(schedule_id)
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+
+async def _scheduler_loop() -> None:
+    while True:
+        now = time.time()
+        for schedule in _load_schedules():
+            if not schedule.get("enabled"):
+                continue
+            schedule_id = str(schedule.get("id"))
+            if schedule_id in _running_schedule_ids:
+                continue
+            next_run_at = float(schedule.get("next_run_at") or now + _interval_seconds(schedule))
+            if "next_run_at" not in schedule:
+                _update_schedule(schedule_id, {"next_run_at": next_run_at})
+                continue
+            if next_run_at <= now:
+                asyncio.create_task(_run_schedule(schedule))
+        await asyncio.sleep(60)
+
+
+@app.on_event("startup")
+async def start_scheduler() -> None:
+    global _scheduler_task
+    if _scheduler_task is None:
+        _scheduler_task = asyncio.create_task(_scheduler_loop())
+
+
 # ─── API routes ───────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
@@ -257,8 +478,7 @@ def health() -> dict:
 def get_categories() -> dict:
     if not CATEGORIES_FILE.exists():
         raise HTTPException(404, "categories.yaml not found")
-    with open(CATEGORIES_FILE, encoding="utf-8") as f:
-        return yaml.safe_load(f)  # type: ignore[return-value]
+    return _load_categories()
 
 
 @app.get("/api/settings")
@@ -401,6 +621,65 @@ def update_settings(body: SettingsBody) -> dict:
     }
     _write_env(filtered)
     return {"status": "saved"}
+
+
+class ScheduleBody(BaseModel):
+    schedule: dict
+
+
+@app.get("/api/schedules")
+def list_schedules() -> list:
+    return sorted(_load_schedules(), key=lambda item: item.get("created_at") or 0, reverse=True)
+
+
+@app.post("/api/schedules")
+def create_schedule(body: ScheduleBody) -> dict:
+    schedule = dict(body.schedule)
+    schedule["id"] = secrets.token_urlsafe(8)
+    schedule["created_at"] = time.time()
+    schedule["updated_at"] = schedule["created_at"]
+    schedule["enabled"] = bool(schedule.get("enabled", True))
+    schedule["frequency_value"] = float(schedule.get("frequency_value") or 24)
+    schedule["frequency_unit"] = schedule.get("frequency_unit") if schedule.get("frequency_unit") in SCHEDULE_UNITS else "hours"
+    schedule["next_run_at"] = time.time() + _interval_seconds(schedule)
+    schedules = _load_schedules()
+    schedules.append(schedule)
+    _save_schedules(schedules)
+    return schedule
+
+
+@app.put("/api/schedules/{schedule_id}")
+def update_schedule(schedule_id: str, body: ScheduleBody) -> dict:
+    updates = dict(body.schedule)
+    updates["updated_at"] = time.time()
+    if "frequency_value" in updates:
+        updates["frequency_value"] = float(updates["frequency_value"] or 24)
+    if updates.get("frequency_unit") not in SCHEDULE_UNITS:
+        updates.pop("frequency_unit", None)
+    updated = _update_schedule(schedule_id, updates)
+    if updated is None:
+        raise HTTPException(404, f"Schedule '{schedule_id}' not found")
+    return updated
+
+
+@app.delete("/api/schedules/{schedule_id}")
+def delete_schedule(schedule_id: str) -> dict:
+    schedules = _load_schedules()
+    remaining = [schedule for schedule in schedules if schedule.get("id") != schedule_id]
+    if len(remaining) == len(schedules):
+        raise HTTPException(404, f"Schedule '{schedule_id}' not found")
+    _save_schedules(remaining)
+    return {"status": "deleted"}
+
+
+@app.post("/api/schedules/{schedule_id}/run")
+async def run_schedule_now(schedule_id: str) -> dict:
+    updated = _update_schedule(schedule_id, {"next_run_at": time.time(), "updated_at": time.time()})
+    if updated is None:
+        raise HTTPException(404, f"Schedule '{schedule_id}' not found")
+    if schedule_id not in _running_schedule_ids:
+        asyncio.create_task(_run_schedule(updated))
+    return updated
 
 
 @app.get("/api/runs")
