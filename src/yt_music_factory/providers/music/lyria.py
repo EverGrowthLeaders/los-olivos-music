@@ -7,7 +7,7 @@ import wave
 from pathlib import Path
 from typing import Any
 
-from ...config import JobSpec
+from ...config import JobSpec, channel_style_prompt
 from ...prompt_safety import assert_prompt_is_licensing_safe
 from ...utils import ensure_dir, write_json
 
@@ -38,6 +38,9 @@ class LyriaMusicProvider:
         prompt = spec.music.prompt or category.get("music_prompt")
         if not prompt:
             raise ValueError("A music prompt is required for Lyria generation")
+        style_note = channel_style_prompt(spec.channel_style, media="music")
+        if style_note:
+            prompt = f"{prompt}\n\nAccount-level creative direction:\n{style_note}"
         assert_prompt_is_licensing_safe(prompt, field="music.prompt")
 
         model = self._normalize_model(spec.music.model or self.model)

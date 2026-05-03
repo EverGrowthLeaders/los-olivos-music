@@ -70,6 +70,15 @@ class SeoConfig:
 
 
 @dataclass(slots=True)
+class ChannelStyleConfig:
+    aesthetic: str | None = None
+    visual_style: str | None = None
+    color_palette: str | None = None
+    sonic_identity: str | None = None
+    avoid: str | None = None
+
+
+@dataclass(slots=True)
 class YoutubeConfig:
     upload: bool = False
     privacy_status: str = "private"
@@ -95,6 +104,7 @@ class JobSpec:
     images: ImageConfig = field(default_factory=ImageConfig)
     video: VideoConfig = field(default_factory=VideoConfig)
     seo: SeoConfig = field(default_factory=SeoConfig)
+    channel_style: ChannelStyleConfig = field(default_factory=ChannelStyleConfig)
     youtube: YoutubeConfig = field(default_factory=YoutubeConfig)
     assets: AssetsConfig = field(default_factory=AssetsConfig)
     source_path: Path | None = None
@@ -126,6 +136,7 @@ def load_spec(path: Path) -> JobSpec:
         images=ImageConfig(**_section(raw, "images")),
         video=VideoConfig(**_section(raw, "video")),
         seo=SeoConfig(**_section(raw, "seo")),
+        channel_style=ChannelStyleConfig(**_section(raw, "channel_style")),
         youtube=YoutubeConfig(**_section(raw, "youtube")),
         assets=AssetsConfig(**_section(raw, "assets")),
         source_path=path,
@@ -165,6 +176,22 @@ def category_for(spec: JobSpec, categories: dict[str, dict[str, Any]]) -> dict[s
         available = ", ".join(sorted(categories))
         raise KeyError(f"Unknown category_key '{spec.category_key}'. Available: {available}")
     return categories[spec.category_key]
+
+
+def channel_style_prompt(style: ChannelStyleConfig, *, media: str) -> str:
+    lines: list[str] = []
+    if style.aesthetic:
+        lines.append(f"Channel aesthetic: {style.aesthetic.strip()}")
+    if media == "image":
+        if style.visual_style:
+            lines.append(f"Visual language: {style.visual_style.strip()}")
+        if style.color_palette:
+            lines.append(f"Color palette: {style.color_palette.strip()}")
+    if media == "music" and style.sonic_identity:
+        lines.append(f"Sonic identity: {style.sonic_identity.strip()}")
+    if style.avoid:
+        lines.append(f"Avoid: {style.avoid.strip()}")
+    return "\n".join(line for line in lines if line)
 
 
 def resolve_asset_paths(spec: JobSpec) -> tuple[list[Path], list[Path]]:

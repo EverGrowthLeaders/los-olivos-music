@@ -199,6 +199,13 @@ def build_gemini_metadata(spec: JobSpec, category: dict[str, Any]) -> VideoMetad
         },
         "primary_keyword": spec.seo.primary_keyword,
         "music_provider": spec.music.provider,
+        "channel_style": {
+            "aesthetic": spec.channel_style.aesthetic,
+            "visual_style": spec.channel_style.visual_style,
+            "color_palette": spec.channel_style.color_palette,
+            "sonic_identity": spec.channel_style.sonic_identity,
+            "avoid": spec.channel_style.avoid,
+        },
     }
     try:
         response = requests.post(

@@ -7,7 +7,7 @@ from typing import Any
 
 import requests
 
-from ...config import JobSpec
+from ...config import JobSpec, channel_style_prompt
 from ...prompt_safety import assert_prompt_is_licensing_safe
 from ...utils import ensure_dir
 
@@ -30,6 +30,9 @@ class GeminiImageProvider:
         prompt = spec.images.prompt or category.get("image_prompt")
         if not prompt:
             raise ValueError("An image prompt is required for Gemini image generation")
+        style_note = channel_style_prompt(spec.channel_style, media="image")
+        if style_note:
+            prompt = f"{prompt}\n\nAccount-level art direction:\n{style_note}"
         assert_prompt_is_licensing_safe(prompt, field="images.prompt")
         count = max(1, spec.images.count)
         paths: list[Path] = []

@@ -113,6 +113,28 @@
         </button>
       </div>
 
+      <!-- Account style -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-8">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-xs font-medium text-zinc-600 uppercase tracking-wider mb-2">Estética de cuenta</div>
+            <h2 class="text-base font-semibold" x-text="settings.CHANNEL_AESTHETIC ? 'Dirección creativa definida' : 'Sin estética global definida'"></h2>
+            <p class="text-sm text-zinc-500 mt-1 max-w-2xl"
+              x-text="settings.CHANNEL_AESTHETIC || 'Define aquí el tono visual y sonoro para que todos los vídeos salgan con una identidad consistente.'">
+            </p>
+            <div x-show="settings.CHANNEL_COLOR_PALETTE" class="flex flex-wrap gap-1.5 mt-3">
+              <template x-for="color in splitList(settings.CHANNEL_COLOR_PALETTE)" :key="color">
+                <span class="text-xs bg-zinc-950 border border-zinc-800 text-zinc-400 px-2 py-1 rounded-md" x-text="color"></span>
+              </template>
+            </div>
+          </div>
+          <button @click="tab = 'config'; scrollToStyleSettings()"
+            class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0">
+            Editar estética
+          </button>
+        </div>
+      </div>
+
       <!-- Recent runs preview -->
       <template x-if="runs.length > 0">
         <div>
@@ -728,6 +750,51 @@
         </div>
       </div>
 
+      <!-- Account aesthetic -->
+      <div id="account-style-settings" class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-3">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-6 h-6 rounded bg-fuchsia-900/50 flex items-center justify-center text-fuchsia-300 text-xs font-bold">A</div>
+          <h2 class="text-sm font-semibold">Estética de cuenta</h2>
+          <span class="text-xs text-zinc-600">Se aplica a música, imagen y SEO</span>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Dirección estética general</label>
+            <textarea x-model="settingsForm.CHANNEL_AESTHETIC" rows="3"
+              placeholder="Ej: minimalismo premium, concentración profunda, trading desk nocturno, sensación de precisión y calma..."
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-500 mb-1.5">Lenguaje visual</label>
+              <textarea x-model="settingsForm.CHANNEL_VISUAL_STYLE" rows="3"
+                placeholder="Ej: cinematográfico, fondos limpios, objetos financieros abstractos, luz suave, sin texto en imagen..."
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-500 mb-1.5">Identidad sonora</label>
+              <textarea x-model="settingsForm.CHANNEL_SONIC_IDENTITY" rows="3"
+                placeholder="Ej: ambient electrónico cálido, pulso sutil, bajos controlados, cero melodías intrusivas..."
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-500 mb-1.5">Paleta de color</label>
+              <input x-model="settingsForm.CHANNEL_COLOR_PALETTE" type="text"
+                placeholder="negro grafito, verde terminal, blanco humo, acentos dorados"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-500 mb-1.5">Evitar siempre</label>
+              <input x-model="settingsForm.CHANNEL_AVOID" type="text"
+                placeholder="texto en imagen, logos, caras, estética infantil, colores chillones"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- YouTube -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-3">
         <div class="flex items-center gap-2 mb-4">
@@ -940,6 +1007,20 @@
         }
       },
 
+      splitList(value) {
+        return (value || '')
+          .split(',')
+          .map(item => item.trim())
+          .filter(Boolean)
+          .slice(0, 8);
+      },
+
+      scrollToStyleSettings() {
+        setTimeout(() => {
+          document.getElementById('account-style-settings')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
+      },
+
       newSlugSuffix() {
         return Math.random().toString(36).slice(2, 7);
       },
@@ -973,6 +1054,38 @@
           .replace(/-+/g, '-')
           .replace(/^-|-$/g, '')
           .slice(0, 50);
+      },
+
+      cleanMultiline(value) {
+        return (value || '').toString().trim();
+      },
+
+      yamlBlock(key, value, indent = '  ') {
+        const clean = this.cleanMultiline(value);
+        if (!clean) return [`${indent}${key}:`];
+        return [
+          `${indent}${key}: |-`,
+          ...clean.split('\n').map(line => `${indent}  ${line}`),
+        ];
+      },
+
+      channelStyle() {
+        const form = this.settingsForm || {};
+        return {
+          aesthetic:      this.cleanMultiline(form.CHANNEL_AESTHETIC),
+          visual_style:   this.cleanMultiline(form.CHANNEL_VISUAL_STYLE),
+          color_palette:  this.cleanMultiline(form.CHANNEL_COLOR_PALETTE),
+          sonic_identity: this.cleanMultiline(form.CHANNEL_SONIC_IDENTITY),
+          avoid:          this.cleanMultiline(form.CHANNEL_AVOID),
+        };
+      },
+
+      buildMusicPrompt(cat) {
+        return this.cleanMultiline(cat.music_prompt || '');
+      },
+
+      buildImagePrompt(cat) {
+        return this.cleanMultiline(cat.image_prompt || '');
       },
 
       // ── Data loaders ──
@@ -1023,6 +1136,7 @@
         this.ensureSlug(true);
         const cat = this.categories[f.category_key] || {};
         const keyword = f.seo_keyword || (cat.primary_keywords || [''])[0];
+        const style = this.channelStyle();
 
         const lines = [
           `job:`,
@@ -1033,8 +1147,16 @@
           ``,
           `category_key: ${f.category_key}`,
           ``,
+          `channel_style:`,
+          ...this.yamlBlock('aesthetic', style.aesthetic, '  '),
+          ...this.yamlBlock('visual_style', style.visual_style, '  '),
+          ...this.yamlBlock('color_palette', style.color_palette, '  '),
+          ...this.yamlBlock('sonic_identity', style.sonic_identity, '  '),
+          ...this.yamlBlock('avoid', style.avoid, '  '),
+          ``,
           `music:`,
           `  provider: ${f.music_provider}`,
+          ...this.yamlBlock('prompt', this.buildMusicPrompt(cat), '  '),
           `  track_count: ${f.track_count}`,
           `  track_duration_seconds: ${f.track_duration}`,
           `  instrumental: ${f.instrumental}`,
@@ -1049,6 +1171,7 @@
           ``,
           `images:`,
           `  provider: ${f.images_provider}`,
+          ...this.yamlBlock('prompt', this.buildImagePrompt(cat), '  '),
           `  count: ${f.images_count}`,
           `  aspect_ratio: "16:9"`,
           `  image_size: "2K"`,

@@ -7,7 +7,7 @@ from typing import Any
 
 import requests
 
-from ...config import JobSpec
+from ...config import JobSpec, channel_style_prompt
 from ...prompt_safety import assert_prompt_is_licensing_safe
 from ...utils import download_file, ensure_dir
 
@@ -54,6 +54,9 @@ class MubertMusicProvider:
 
     def _create_track(self, spec: JobSpec, category: dict, variation: int) -> dict[str, Any]:
         prompt = spec.music.prompt or category.get("music_prompt")
+        style_note = channel_style_prompt(spec.channel_style, media="music")
+        if prompt and style_note:
+            prompt = f"{prompt}\n\nAccount-level creative direction:\n{style_note}"
         payload: dict[str, Any] = {
             "duration": spec.music.track_duration_seconds,
             "bitrate": spec.music.bitrate,

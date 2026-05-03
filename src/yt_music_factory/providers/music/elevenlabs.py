@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from ...config import JobSpec
+from ...config import JobSpec, channel_style_prompt
 from ...prompt_safety import assert_prompt_is_licensing_safe
 from ...utils import ensure_dir
 
@@ -27,6 +27,9 @@ class ElevenLabsMusicProvider:
         prompt = spec.music.prompt or category.get("music_prompt")
         if not prompt:
             raise ValueError("A music prompt is required for ElevenLabs generation")
+        style_note = channel_style_prompt(spec.channel_style, media="music")
+        if style_note:
+            prompt = f"{prompt}\n\nAccount-level creative direction:\n{style_note}"
         assert_prompt_is_licensing_safe(prompt, field="music.prompt")
         if spec.music.instrumental and "no vocals" not in prompt.lower():
             prompt = f"{prompt}. No vocals, instrumental only."
