@@ -17,6 +17,7 @@ services:
       YOUTUBE_TOKEN_FILE: /app/.secrets/youtube-token.json
       YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
       YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      YOUTUBE_REDIRECT_URI: ${YOUTUBE_REDIRECT_URI:-}
       YMF_ENV_FILE: /app/.secrets/.env
     volumes:
       - yt_music_factory_runs:/app/runs
@@ -50,6 +51,7 @@ services:
       YOUTUBE_TOKEN_FILE: /app/.secrets/youtube-token.json
       YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
       YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      YOUTUBE_REDIRECT_URI: ${YOUTUBE_REDIRECT_URI:-}
       YMF_ENV_FILE: /app/.secrets/.env
     volumes:
       - yt_music_factory_runs:/app/runs
