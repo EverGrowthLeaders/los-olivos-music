@@ -65,7 +65,7 @@ class LyriaMusicProvider:
                 )
 
             parsed = response.json()
-            audio_bytes, text_parts = self._extract_audio_and_text(parsed)
+            audio_bytes, text_parts = self._extract_audio_and_text(parsed, api_key=self.api_key)
             write_json(
                 sidecar,
                 {
@@ -77,8 +77,13 @@ class LyriaMusicProvider:
                 },
             )
             if not audio_bytes:
-                write_json(out_dir / f"lyria_track_{idx + 1:02d}_raw_response.json", parsed)
-                raise RuntimeError("Lyria response did not include audio data")
+                raw_response = out_dir / f"lyria_track_{idx + 1:02d}_raw_response.json"
+                write_json(raw_response, parsed)
+                raise RuntimeError(
+                    "Lyria response did not include audio data. "
+                    f"Raw response saved to {raw_response}. "
+                    f"Response summary: {self._response_debug_summary(parsed)}"
+                )
 
             out.write_bytes(audio_bytes)
             paths.append(out)
@@ -120,20 +125,88 @@ class LyriaMusicProvider:
         }
 
     @staticmethod
-    def _extract_audio_and_text(payload: dict[str, Any]) -> tuple[bytes | None, list[str]]:
+    def _extract_audio_and_text(payload: dict[str, Any], api_key: str | None = None) -> tuple[bytes | None, list[str]]:
         text_parts: list[str] = []
         audio_bytes: bytes | None = None
-        for candidate in payload.get("candidates", []) or []:
-            content = candidate.get("content") or {}
-            for part in content.get("parts", []) or []:
-                text = part.get("text")
-                if isinstance(text, str) and text.strip():
-                    text_parts.append(text)
-                inline = part.get("inlineData") or part.get("inline_data")
-                if isinstance(inline, dict) and inline.get("data"):
-                    data = inline["data"]
-                    if isinstance(data, str):
-                        audio_bytes = base64.b64decode(data)
-                    elif isinstance(data, bytes):
-                        audio_bytes = data
+        for part in LyriaMusicProvider._iter_parts(payload):
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                text_parts.append(text)
+            if audio_bytes is None:
+                audio_bytes = LyriaMusicProvider._audio_bytes_from_part(part, api_key=api_key)
         return audio_bytes, text_parts
+
+    @staticmethod
+    def _iter_parts(value: Any):
+        yield from LyriaMusicProvider._iter_parts_seen(value, set())
+
+    @staticmethod
+    def _iter_parts_seen(value: Any, seen: set[int]):
+        if isinstance(value, dict):
+            ident = id(value)
+            if any(
+                key in value
+                for key in ("text", "inlineData", "inline_data", "fileData", "file_data")
+            ) and ident not in seen:
+                seen.add(ident)
+                yield value
+            parts = value.get("parts")
+            if isinstance(parts, list):
+                for part in parts:
+                    if isinstance(part, dict) and id(part) not in seen:
+                        seen.add(id(part))
+                        yield part
+            for nested in value.values():
+                yield from LyriaMusicProvider._iter_parts_seen(nested, seen)
+        elif isinstance(value, list):
+            for item in value:
+                yield from LyriaMusicProvider._iter_parts_seen(item, seen)
+
+    @staticmethod
+    def _audio_bytes_from_part(part: dict[str, Any], api_key: str | None = None) -> bytes | None:
+        inline = part.get("inlineData") or part.get("inline_data")
+        if isinstance(inline, dict):
+            mime_type = str(inline.get("mimeType") or inline.get("mime_type") or "")
+            data = inline.get("data")
+            if data and (mime_type.startswith("audio/") or not mime_type):
+                if isinstance(data, str):
+                    return base64.b64decode(data)
+                if isinstance(data, bytes):
+                    return data
+
+        file_data = part.get("fileData") or part.get("file_data")
+        if isinstance(file_data, dict):
+            mime_type = str(file_data.get("mimeType") or file_data.get("mime_type") or "")
+            file_uri = file_data.get("fileUri") or file_data.get("file_uri")
+            if isinstance(file_uri, str) and mime_type.startswith("audio/"):
+                headers = {"x-goog-api-key": api_key} if api_key else None
+                response = requests.get(file_uri, headers=headers, timeout=600)
+                response.raise_for_status()
+                return response.content
+        return None
+
+    @staticmethod
+    def _response_debug_summary(payload: dict[str, Any]) -> dict[str, Any]:
+        candidates = payload.get("candidates") or []
+        summary: dict[str, Any] = {
+            "candidate_count": len(candidates) if isinstance(candidates, list) else 0,
+            "finish_reasons": [],
+            "part_keys": [],
+            "mime_types": [],
+            "text_preview": [],
+        }
+        for candidate in candidates if isinstance(candidates, list) else []:
+            if isinstance(candidate, dict) and candidate.get("finishReason"):
+                summary["finish_reasons"].append(candidate.get("finishReason"))
+        for part in LyriaMusicProvider._iter_parts(payload):
+            summary["part_keys"].append(sorted(part.keys()))
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                summary["text_preview"].append(text.strip()[:300])
+            for key in ("inlineData", "inline_data", "fileData", "file_data"):
+                data = part.get(key)
+                if isinstance(data, dict):
+                    mime_type = data.get("mimeType") or data.get("mime_type")
+                    if mime_type:
+                        summary["mime_types"].append(mime_type)
+        return summary
