@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CATEGORIES_FILE = PROJECT_ROOT / "config" / "categories.yaml"
-ENV_FILE = PROJECT_ROOT / ".env"
+ENV_FILE = Path(os.getenv("YMF_ENV_FILE", "/app/.secrets/.env" if Path("/app").exists() else str(PROJECT_ROOT / ".env")))
 
 SETTING_KEYS = [
     "ELEVENLABS_API_KEY",
@@ -63,6 +63,7 @@ def _load_env() -> dict[str, str]:
 
 
 def _write_env(updates: dict[str, str]) -> None:
+    ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
     existing_lines = (
         ENV_FILE.read_text(encoding="utf-8").splitlines() if ENV_FILE.exists() else []
     )
@@ -91,7 +92,8 @@ def _write_env(updates: dict[str, str]) -> None:
 def _get_workdir() -> Path:
     env = _load_env()
     workdir = env.get("YMF_WORKDIR") or os.getenv("YMF_WORKDIR") or "./runs"
-    return (PROJECT_ROOT / workdir).resolve()
+    path = Path(workdir)
+    return path.resolve() if path.is_absolute() else (PROJECT_ROOT / path).resolve()
 
 
 # ─── API routes ───────────────────────────────────────────────────────────────
@@ -99,12 +101,15 @@ def _get_workdir() -> Path:
 @app.get("/api/health")
 def health() -> dict:
     try:
+        env = os.environ.copy()
+        env.update(_load_env())
         result = subprocess.run(
             _ymf_cmd() + ["doctor", "--json"],
             capture_output=True,
             text=True,
             timeout=30,
             cwd=str(PROJECT_ROOT),
+            env=env,
         )
         try:
             details = json.loads(result.stdout)
@@ -126,7 +131,7 @@ def get_categories() -> dict:
 @app.get("/api/settings")
 def get_settings() -> dict:
     env = _load_env()
-    return {key: env.get(key, "") for key in SETTING_KEYS}
+    return {key: env.get(key, os.getenv(key, "")) for key in SETTING_KEYS}
 
 
 class SettingsBody(BaseModel):
@@ -135,7 +140,11 @@ class SettingsBody(BaseModel):
 
 @app.post("/api/settings")
 def update_settings(body: SettingsBody) -> dict:
-    filtered = {k: v for k, v in body.settings.items() if k in SETTING_KEYS}
+    filtered = {
+        k: v
+        for k, v in body.settings.items()
+        if k in SETTING_KEYS and (v or not os.getenv(k))
+    }
     _write_env(filtered)
     return {"status": "saved"}
 

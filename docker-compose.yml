@@ -15,6 +15,7 @@ services:
       GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemini-3.1-flash-lite-preview}
       YOUTUBE_CLIENT_SECRETS: /app/.secrets/client_secret.json
       YOUTUBE_TOKEN_FILE: /app/.secrets/youtube-token.json
+      YMF_ENV_FILE: /app/.secrets/.env
     volumes:
       - yt_music_factory_runs:/app/runs
       - yt_music_factory_secrets:/app/.secrets
@@ -45,6 +46,7 @@ services:
       GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemini-3.1-flash-lite-preview}
       YOUTUBE_CLIENT_SECRETS: /app/.secrets/client_secret.json
       YOUTUBE_TOKEN_FILE: /app/.secrets/youtube-token.json
+      YMF_ENV_FILE: /app/.secrets/.env
     volumes:
       - yt_music_factory_runs:/app/runs
       - yt_music_factory_secrets:/app/.secrets
