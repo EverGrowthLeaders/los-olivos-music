@@ -42,7 +42,11 @@ class GeminiImageProvider:
                 f"{prompt}\nVariation {idx + 1}: same art direction, different composition. "
                 "Do not include text, typography, watermarks, logos, brand names, or UI."
             )
-            payload = self._build_payload(variation_prompt, spec.images.aspect_ratio, spec.images.image_size)
+            payload = self._build_payload(
+                variation_prompt,
+                spec.images.aspect_ratio,
+                self._normalize_image_size(spec.images.image_size),
+            )
             response = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
                 headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
@@ -64,6 +68,15 @@ class GeminiImageProvider:
     @staticmethod
     def _normalize_model(value: str) -> str:
         return (value or "gemini-3.1-flash-image-preview").strip()
+
+    @staticmethod
+    def _normalize_image_size(value: str) -> str:
+        normalized = (value or "2K").strip().upper()
+        if normalized in {"1K", "2K", "4K"}:
+            return normalized
+        if "X" in normalized:
+            return "2K"
+        return "2K"
 
     @staticmethod
     def _build_payload(prompt: str, aspect_ratio: str, image_size: str) -> dict[str, Any]:

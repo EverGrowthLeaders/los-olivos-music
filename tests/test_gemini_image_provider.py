@@ -11,3 +11,8 @@ def test_gemini_image_payload_requests_text_and_image():
     config = payload["generationConfig"]
     assert config["responseModalities"] == ["TEXT", "IMAGE"]
     assert config["imageConfig"] == {"aspectRatio": "16:9", "imageSize": "2K"}
+
+
+def test_gemini_image_normalizes_video_resolution_to_2k():
+    assert GeminiImageProvider._normalize_image_size("1920x1080") == "2K"
+    assert GeminiImageProvider._normalize_image_size("4k") == "4K"
