@@ -1,0 +1,15 @@
+.env
+.secrets/
+runs/
+*.mp4
+*.m4a
+*.wav
+*.mp3
+*.log
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+client_secret.json

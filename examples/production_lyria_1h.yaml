@@ -1,0 +1,41 @@
+job:
+  slug: lyria-focus-cyberpunk-001
+  title_seed: "cozy cyberpunk deep work"
+  language: en
+  target_minutes: 60
+category_key: focus_lofi
+music:
+  provider: lyria
+  model: lyria-3-pro-preview
+  track_count: 20
+  track_duration_seconds: 180
+  instrumental: true
+  output_format: mp3
+  # prompt can be omitted; category prompt will be used.
+  prompt:
+images:
+  provider: gemini
+  count: 4
+  aspect_ratio: "16:9"
+  image_size: "2K"
+  prompt:
+video:
+  resolution: "1920x1080"
+  fps: 1
+  visual_mode: slideshow
+  image_duration_seconds: 900
+  video_preset: veryfast
+  audio_bitrate: 192k
+  normalize_audio: false
+seo:
+  provider: gemini
+  primary_keyword: "lofi beats for studying"
+youtube:
+  upload: false
+  privacy_status: private
+  made_for_kids: false
+  contains_synthetic_media: true
+  notify_subscribers: false
+assets:
+  audio_files: []
+  image_files: []

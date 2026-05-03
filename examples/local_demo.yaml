@@ -1,0 +1,37 @@
+job:
+  slug: local-demo-lofi
+  title_seed: "late night coding session"
+  language: en
+  target_minutes: 0.12
+category_key: focus_lofi
+music:
+  provider: local
+  track_count: 2
+  track_duration_seconds: 4
+  instrumental: true
+  output_format: wav
+images:
+  provider: local
+  count: 2
+  aspect_ratio: "16:9"
+  image_size: "1280x720"
+video:
+  resolution: "1280x720"
+  fps: 1
+  visual_mode: slideshow
+  image_duration_seconds: 4
+  video_preset: ultrafast
+  audio_bitrate: 128k
+  normalize_audio: false
+seo:
+  provider: local
+  primary_keyword: "lofi beats for studying"
+youtube:
+  upload: false
+  privacy_status: private
+  made_for_kids: false
+  contains_synthetic_media: true
+  notify_subscribers: false
+assets:
+  audio_files: []
+  image_files: []

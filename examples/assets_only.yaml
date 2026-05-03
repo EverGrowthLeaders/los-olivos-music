@@ -1,0 +1,41 @@
+job:
+  slug: assets-only-example
+  title_seed: "manual audio and images"
+  language: en
+  target_minutes: 60
+category_key: meditation_nature
+music:
+  provider: assets
+  track_count: 0
+  track_duration_seconds: 300
+  instrumental: true
+  output_format: mp3
+images:
+  provider: assets
+  count: 0
+  aspect_ratio: "16:9"
+  image_size: "2K"
+video:
+  resolution: "1920x1080"
+  fps: 1
+  visual_mode: slideshow
+  image_duration_seconds: 900
+  video_preset: veryfast
+  audio_bitrate: 192k
+  normalize_audio: false
+seo:
+  provider: local
+  primary_keyword: "meditation music"
+youtube:
+  upload: false
+  privacy_status: private
+  made_for_kids: false
+  contains_synthetic_media: true
+  notify_subscribers: false
+assets:
+  audio_files:
+    - ./assets/track01.mp3
+    - ./assets/track02.mp3
+  image_files:
+    - ./assets/background01.png
+    - ./assets/background02.png

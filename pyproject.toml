@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yt-music-factory"
+version = "0.1.0"
+description = "Automated AI music-to-YouTube long-form video pipeline"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "yt-music-factory" }]
+dependencies = [
+  "PyYAML>=6.0.1",
+  "Pillow>=10.0.0",
+  "requests>=2.31.0",
+  "python-dotenv>=1.0.0",
+  "google-api-python-client>=2.130.0",
+  "google-auth-oauthlib>=1.2.0",
+  "google-auth-httplib2>=0.2.0",
+  "elevenlabs>=1.50.0"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.6.0"]
+
+[project.scripts]
+ymf = "yt_music_factory.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

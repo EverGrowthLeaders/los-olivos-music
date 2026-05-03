@@ -1,0 +1,148 @@
+focus_lofi:
+  label: "Lo-fi Focus"
+  youtube_category_id: "10"
+  primary_keywords:
+    - "lofi beats for studying"
+    - "study music"
+    - "focus music"
+    - "lofi hip hop mix"
+    - "background music for work"
+  title_phrases:
+    - "Lo-fi Focus Mix"
+    - "Deep Work Lo-fi Beats"
+    - "Study With Me Instrumental Mix"
+  music_prompt: >-
+    Instrumental warm lo-fi hip hop for deep focus, no vocals, soft dusty drums,
+    mellow jazz chords, subtle vinyl texture, rounded bass, calm and non-distracting,
+    cohesive intro and outro, suitable for studying and coding.
+  image_prompt: >-
+    Cozy cyberpunk study room at night, rain on the window, warm desk lamp,
+    plants, notebooks, headphones, cinematic 16:9, no logos, no readable brand names,
+    calm premium YouTube music background.
+  audience_value: "focus, studying, coding, writing and relaxed work sessions"
+  tags:
+    - lofi
+    - lofi beats
+    - study music
+    - focus music
+    - deep work
+    - coding music
+    - instrumental music
+    - ai music
+
+sleep_ambient:
+  label: "Sleep Ambient"
+  youtube_category_id: "10"
+  primary_keywords:
+    - "sleep music"
+    - "ambient sleep music"
+    - "relaxing music for sleep"
+    - "deep sleep music"
+    - "calm ambient music"
+  title_phrases:
+    - "Sleep Ambient"
+    - "Calm Ambient Music for Sleep"
+    - "Deep Sleep Atmospheric Mix"
+  music_prompt: >-
+    Slow ambient music for sleep, no vocals, soft pads, warm drones, gentle evolving
+    harmonies, no sudden percussion, no sharp transients, peaceful and continuous,
+    relaxing night atmosphere.
+  image_prompt: >-
+    Serene moonlit bedroom overlooking mountains, soft clouds, tranquil blue tones,
+    minimal premium composition, 16:9, no text, no logos, calming YouTube background.
+  audience_value: "sleep, winding down, stress relief and night-time relaxation"
+  tags:
+    - sleep music
+    - ambient music
+    - relaxing music
+    - deep sleep
+    - calm music
+    - meditation music
+    - ai music
+
+meditation_nature:
+  label: "Meditation Nature"
+  youtube_category_id: "10"
+  primary_keywords:
+    - "meditation music"
+    - "relaxing nature music"
+    - "calming music"
+    - "mindfulness music"
+    - "peaceful ambient music"
+  title_phrases:
+    - "Meditation Nature Music"
+    - "Peaceful Mindfulness Ambient"
+    - "Calm Nature Soundscape"
+  music_prompt: >-
+    Peaceful meditation music with soft organic textures, gentle bells, airy pads,
+    no vocals, minimal percussion, natural spacious ambience, steady calming flow,
+    suitable for mindfulness and breathing.
+  image_prompt: >-
+    Misty sunrise forest beside a still lake, soft golden light, meditative atmosphere,
+    photorealistic 16:9, no text, no logos, premium calming YouTube background.
+  audience_value: "meditation, mindfulness, yoga, breathing and calm daily routines"
+  tags:
+    - meditation music
+    - relaxing music
+    - nature music
+    - mindfulness
+    - calm music
+    - yoga music
+    - ai music
+
+synthwave_gaming:
+  label: "Synthwave Gaming"
+  youtube_category_id: "10"
+  primary_keywords:
+    - "synthwave mix"
+    - "gaming music"
+    - "cyberpunk music"
+    - "retro wave music"
+    - "focus gaming playlist"
+  title_phrases:
+    - "Synthwave Gaming Mix"
+    - "Cyberpunk Focus Music"
+    - "Retro Futuristic Gaming Beats"
+  music_prompt: >-
+    Instrumental synthwave for gaming and focus, no vocals, driving analog bass,
+    neon arpeggios, punchy but not harsh drums, cinematic retro futuristic mood,
+    energetic and loop-friendly.
+  image_prompt: >-
+    Neon cyberpunk highway at night, futuristic skyline, magenta and blue lights,
+    retro-futuristic car silhouette, cinematic 16:9, no text, no logos, premium music background.
+  audience_value: "gaming, creative work, cyberpunk focus and energetic background listening"
+  tags:
+    - synthwave
+    - gaming music
+    - cyberpunk music
+    - retro wave
+    - focus music
+    - ai music
+
+piano_rain:
+  label: "Piano Rain"
+  youtube_category_id: "10"
+  primary_keywords:
+    - "relaxing piano music"
+    - "rain piano music"
+    - "calm piano music"
+    - "study piano music"
+    - "peaceful piano"
+  title_phrases:
+    - "Piano Rain Music"
+    - "Relaxing Piano for Study"
+    - "Calm Rainy Night Piano"
+  music_prompt: >-
+    Gentle solo piano with soft ambient rain-like texture, no vocals, emotional but calm,
+    slow tempo, spacious reverb, simple memorable motifs, ideal for reading and reflection.
+  image_prompt: >-
+    Elegant piano near a rainy window at night, candlelight, books, soft reflections,
+    cozy cinematic 16:9, no text, no logos, premium relaxing music background.
+  audience_value: "reading, calm focus, reflection, rainy evenings and quiet study"
+  tags:
+    - piano music
+    - relaxing piano
+    - rain music
+    - study music
+    - calm piano
+    - ai music

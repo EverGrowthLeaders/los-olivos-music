@@ -1,0 +1,36 @@
+job:
+  slug: mubert-ambient-work-001
+  title_seed: "clean ambient work session"
+  language: en
+  target_minutes: 60
+category_key: focus_lofi
+music:
+  provider: mubert
+  playlist_index: "1.0.0"   # Replace with an index enabled in your Mubert license.
+  track_count: 8
+  track_duration_seconds: 480
+  output_format: mp3
+  bitrate: 192
+  intensity: medium
+  mode: track
+images:
+  provider: gemini
+  count: 4
+  aspect_ratio: "16:9"
+  image_size: "2K"
+video:
+  resolution: "1920x1080"
+  fps: 1
+  visual_mode: slideshow
+  image_duration_seconds: 900
+  video_preset: veryfast
+  audio_bitrate: 192k
+seo:
+  provider: gemini
+  primary_keyword: "ambient music for focus"
+youtube:
+  upload: false
+  privacy_status: private
+  contains_synthetic_media: true
+  made_for_kids: false
+  notify_subscribers: false
