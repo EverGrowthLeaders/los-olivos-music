@@ -52,7 +52,7 @@ class LyriaMusicProvider:
                 duration_seconds=spec.music.track_duration_seconds,
                 instrumental=spec.music.instrumental,
             )
-            payload = self._build_payload(track_prompt, output_format)
+            payload = self._build_payload(track_prompt)
             response = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
@@ -113,14 +113,11 @@ class LyriaMusicProvider:
         )
 
     @staticmethod
-    def _build_payload(prompt: str, output_format: str) -> dict[str, Any]:
-        payload: dict[str, Any] = {
+    def _build_payload(prompt: str) -> dict[str, Any]:
+        return {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"responseModalities": ["AUDIO", "TEXT"]},
         }
-        if output_format == "wav":
-            payload["generationConfig"]["responseMimeType"] = "audio/wav"
-        return payload
 
     @staticmethod
     def _extract_audio_and_text(payload: dict[str, Any]) -> tuple[bytes | None, list[str]]:

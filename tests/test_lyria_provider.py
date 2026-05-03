@@ -24,8 +24,8 @@ def test_lyria_extracts_audio_and_text():
     assert text_parts == ["generated structure"]
 
 
-def test_lyria_wav_payload_sets_response_mime_type():
-    payload = LyriaMusicProvider._build_payload("ambient track", "wav")
+def test_lyria_payload_requests_audio_without_response_mime_type():
+    payload = LyriaMusicProvider._build_payload("ambient track")
 
     assert payload["generationConfig"]["responseModalities"] == ["AUDIO", "TEXT"]
-    assert payload["generationConfig"]["responseMimeType"] == "audio/wav"
+    assert "responseMimeType" not in payload["generationConfig"]
