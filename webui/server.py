@@ -235,10 +235,6 @@ def start_youtube_oauth(request: Request) -> dict:
         raise HTTPException(400, "Configure YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET first")
 
     state = secrets.token_urlsafe(32)
-    state_path = _oauth_state_path(env)
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({"state": state, "redirect_uri": redirect_uri}) + "\n", encoding="utf-8")
-
     flow = Flow.from_client_config(
         client_config,
         scopes=[YOUTUBE_UPLOAD_SCOPE],
@@ -249,6 +245,19 @@ def start_youtube_oauth(request: Request) -> dict:
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
+    )
+    state_path = _oauth_state_path(env)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "state": state,
+                "redirect_uri": redirect_uri,
+                "code_verifier": getattr(flow, "code_verifier", None),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
     )
     return {"authorization_url": authorization_url, "redirect_uri": redirect_uri}
 
@@ -283,6 +292,8 @@ def youtube_oauth_callback(request: Request, code: str | None = None, state: str
         scopes=[YOUTUBE_UPLOAD_SCOPE],
         state=state,
         redirect_uri=redirect_uri,
+        code_verifier=saved.get("code_verifier"),
+        autogenerate_code_verifier=False,
     )
     try:
         flow.fetch_token(code=code)
