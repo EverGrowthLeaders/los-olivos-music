@@ -13,6 +13,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY config ./config
 COPY examples ./examples
-RUN python -m pip install --upgrade pip && python -m pip install -e .
+COPY webui ./webui
+RUN python -m pip install --upgrade pip && python -m pip install -e ".[webui]"
 
 ENTRYPOINT ["ymf"]

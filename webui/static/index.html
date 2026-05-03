@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YT Music Factory</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    #log-output::-webkit-scrollbar { width: 5px; }
+    #log-output::-webkit-scrollbar-track { background: transparent; }
+    #log-output::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 9px; }
+    input[type=range] { accent-color: #7c3aed; }
+  </style>
+</head>
+<body class="bg-[#09090b] text-zinc-100 min-h-screen" x-data="app()" x-init="init()" x-cloak>
+
+  <!-- ── NAVBAR ─────────────────────────────────────────────────────────── -->
+  <nav class="sticky top-0 z-50 border-b border-zinc-800/80 bg-[#09090b]/95 backdrop-blur-sm">
+    <div class="max-w-6xl mx-auto px-5 h-14 flex items-center gap-6">
+
+      <div class="flex items-center gap-2.5 font-bold flex-shrink-0">
+        <div class="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center text-sm leading-none">◈</div>
+        <span class="text-sm tracking-tight">YT Music Factory</span>
+      </div>
+
+      <div class="flex gap-0.5">
+        <template x-for="t in tabs" :key="t.id">
+          <button
+            @click="tab = t.id"
+            :class="tab === t.id ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900'"
+            class="px-3.5 py-1.5 rounded-md text-sm font-medium transition-all"
+            x-text="t.label"
+          ></button>
+        </template>
+      </div>
+
+      <div class="ml-auto flex items-center gap-2 flex-shrink-0">
+        <div class="w-1.5 h-1.5 rounded-full transition-colors"
+          :class="{
+            'bg-green-500': health?.status === 'ok',
+            'bg-red-500':   health?.status === 'error',
+            'bg-zinc-600 animate-pulse': !health
+          }"></div>
+        <span class="text-xs text-zinc-600"
+          x-text="health?.status === 'ok' ? 'Sistema OK' : health?.status === 'error' ? 'Error' : 'Verificando…'">
+        </span>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-6xl mx-auto px-5 py-8">
+
+    <!-- ══════════════════════════════ DASHBOARD ══════════════════════════════ -->
+    <section x-show="tab === 'dashboard'">
+
+      <div class="mb-7">
+        <h1 class="text-xl font-semibold">Dashboard</h1>
+        <p class="text-sm text-zinc-500 mt-0.5">Estado del sistema y actividad reciente</p>
+      </div>
+
+      <!-- API key status cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <template x-for="(label, key) in apiStatusKeys" :key="key">
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <div class="text-xs text-zinc-600 mb-2" x-text="label"></div>
+            <div class="flex items-center gap-2">
+              <div class="w-2 h-2 rounded-full flex-shrink-0"
+                :class="settings[key] ? 'bg-green-500' : 'bg-zinc-700'"></div>
+              <span class="text-sm font-medium"
+                :class="settings[key] ? 'text-green-400' : 'text-zinc-600'"
+                x-text="settings[key] ? 'Activo' : 'Sin configurar'">
+              </span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Stats row -->
+      <div class="grid grid-cols-3 gap-3 mb-6">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <div class="text-3xl font-bold mb-1" x-text="runs.length"></div>
+          <div class="text-xs text-zinc-500">Videos generados</div>
+        </div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <div class="text-3xl font-bold mb-1" x-text="Object.keys(categories).length"></div>
+          <div class="text-xs text-zinc-500">Categorías disponibles</div>
+        </div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <div class="text-3xl font-bold mb-1"
+            :class="health?.status === 'ok' ? 'text-green-400' : 'text-zinc-600'"
+            x-text="health?.status === 'ok' ? '✓' : '–'">
+          </div>
+          <div class="text-xs text-zinc-500">FFmpeg disponible</div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex gap-3 mb-8">
+        <button @click="tab = 'nuevo'; step = 1; resetJob()"
+          class="bg-violet-600 hover:bg-violet-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+          + Crear nuevo video
+        </button>
+        <button @click="tab = 'historial'; loadRuns()"
+          class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+          Ver historial
+        </button>
+        <button @click="tab = 'config'"
+          class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+          Configuración →
+        </button>
+      </div>
+
+      <!-- Recent runs preview -->
+      <template x-if="runs.length > 0">
+        <div>
+          <div class="text-xs font-medium text-zinc-600 uppercase tracking-wider mb-3">Últimas generaciones</div>
+          <div class="space-y-2">
+            <template x-for="run in runs.slice(0, 5)" :key="run.slug">
+              <div class="bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-3.5 flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-medium" x-text="run.slug"></div>
+                  <div class="text-xs text-zinc-600 mt-0.5" x-text="formatDate(run.created_at)"></div>
+                </div>
+                <span class="text-xs px-2.5 py-1 rounded-full border font-medium"
+                  :class="run.final_video
+                    ? 'text-green-400 bg-green-950/50 border-green-900'
+                    : 'text-zinc-500 bg-zinc-800/50 border-zinc-700'"
+                  x-text="run.final_video ? 'Completado' : 'Sin video'">
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="runs.length === 0">
+        <div class="text-center py-20">
+          <div class="text-5xl mb-4">🎵</div>
+          <div class="text-base font-medium text-zinc-500">No hay videos generados aún</div>
+          <div class="text-sm text-zinc-600 mt-1">Crea tu primer video desde "Nuevo Video"</div>
+        </div>
+      </template>
+    </section>
+
+
+    <!-- ══════════════════════════════ NUEVO VIDEO ══════════════════════════════ -->
+    <section x-show="tab === 'nuevo'">
+
+      <div class="mb-6">
+        <h1 class="text-xl font-semibold">Nuevo Video</h1>
+        <p class="text-sm text-zinc-500 mt-0.5">Configura y genera un nuevo video de música para YouTube</p>
+      </div>
+
+      <!-- Step progress -->
+      <div class="flex items-center mb-8">
+        <template x-for="(label, i) in steps" :key="i">
+          <div class="flex items-center min-w-0">
+            <button @click="if(step > i+1) step = i+1"
+              :class="step > i+1 ? 'cursor-pointer' : 'cursor-default'"
+              class="flex flex-col items-center gap-1 flex-shrink-0">
+              <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+                :class="{
+                  'bg-violet-600 text-white ring-4 ring-violet-600/20': step === i+1,
+                  'bg-green-600 text-white': step > i+1,
+                  'bg-zinc-800 text-zinc-600': step < i+1
+                }">
+                <span x-show="step <= i+1" x-text="i+1"></span>
+                <span x-show="step > i+1">✓</span>
+              </div>
+              <span class="text-xs hidden md:block transition-colors"
+                :class="{
+                  'text-white': step === i+1,
+                  'text-green-500': step > i+1,
+                  'text-zinc-700': step < i+1
+                }"
+                x-text="label">
+              </span>
+            </button>
+            <div x-show="i < steps.length - 1"
+              class="h-px flex-1 min-w-6 mx-1 mb-4 transition-colors"
+              :class="step > i+1 ? 'bg-green-700' : 'bg-zinc-800'">
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Step 1: Category ── -->
+      <div x-show="step === 1">
+        <h2 class="text-sm font-medium text-zinc-400 mb-4">Selecciona una categoría de contenido</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+          <template x-for="(cat, key) in categories" :key="key">
+            <button @click="selectCategory(key, cat)"
+              class="text-left p-5 rounded-xl border transition-all"
+              :class="jobForm.category_key === key
+                ? 'border-violet-500 bg-violet-950/30 ring-1 ring-violet-500/20'
+                : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'">
+              <div class="text-2xl mb-3" x-text="catIcons[key] || '🎵'"></div>
+              <div class="text-sm font-medium mb-1" x-text="cat.label"></div>
+              <div class="text-xs text-zinc-500 leading-relaxed" x-text="cat.audience_value"></div>
+              <div class="mt-3 flex flex-wrap gap-1.5">
+                <template x-for="kw in (cat.primary_keywords || []).slice(0, 2)" :key="kw">
+                  <span class="text-xs bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full" x-text="kw"></span>
+                </template>
+              </div>
+            </button>
+          </template>
+        </div>
+        <div class="flex justify-end">
+          <button @click="step = 2" :disabled="!jobForm.category_key"
+            class="bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+            Siguiente →
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Step 2: Job basics ── -->
+      <div x-show="step === 2">
+        <h2 class="text-sm font-medium text-zinc-400 mb-4">Información básica del video</h2>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5 mb-6">
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Slug <span class="text-zinc-600">(identificador único)</span></label>
+            <input x-model="jobForm.slug" type="text" placeholder="mi-video-lofi-01"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors font-mono">
+            <p class="text-xs text-zinc-700 mt-1">Sin espacios ni caracteres especiales. Nombra los archivos de salida.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Semilla del título</label>
+            <input x-model="jobForm.title_seed" type="text" placeholder="late night coding session"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+            <p class="text-xs text-zinc-700 mt-1">Frase creativa que personaliza el título en YouTube.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-2">
+              Duración objetivo: <span class="text-white font-semibold" x-text="jobForm.target_minutes + ' min'"></span>
+              <span class="text-zinc-700" x-text="jobForm.target_minutes >= 60 ? ' (' + (jobForm.target_minutes/60).toFixed(1) + 'h)' : ''"></span>
+            </label>
+            <input x-model.number="jobForm.target_minutes" type="range" min="1" max="180" step="1" class="w-full">
+            <div class="flex justify-between text-xs text-zinc-700 mt-1">
+              <span>1 min</span><span>30 min</span><span>1 hora</span><span>2 horas</span><span>3 horas</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-between">
+          <button @click="step = 1" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-5 py-2 rounded-lg text-sm font-medium transition-colors">← Atrás</button>
+          <button @click="step = 3" :disabled="!jobForm.slug"
+            class="bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+            Siguiente →
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Step 3: Music ── -->
+      <div x-show="step === 3">
+        <h2 class="text-sm font-medium text-zinc-400 mb-4">Configuración de música</h2>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5 mb-6">
+
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-2">Proveedor de música</label>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              <template x-for="p in musicProviders" :key="p.value">
+                <button @click="jobForm.music_provider = p.value"
+                  class="border rounded-lg px-3 py-3 text-sm transition-all text-left"
+                  :class="jobForm.music_provider === p.value
+                    ? 'border-violet-500 bg-violet-950/50 text-white'
+                    : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'">
+                  <div class="font-medium" x-text="p.label"></div>
+                  <div class="text-xs opacity-60 mt-0.5" x-text="p.note"></div>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <div x-show="jobForm.music_provider !== 'assets'" class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-zinc-400 mb-1.5">Número de pistas</label>
+              <input x-model.number="jobForm.track_count" type="number" min="1" max="50"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-400 mb-1.5">Duración por pista (seg)</label>
+              <input x-model.number="jobForm.track_duration" type="number" min="10" max="600"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+            </div>
+          </div>
+
+          <div x-show="jobForm.music_provider === 'mubert'">
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Índice de playlist Mubert <span class="text-zinc-600">(opcional)</span></label>
+            <input x-model="jobForm.mubert_playlist" type="text" placeholder="Vacío = generación por prompt de texto"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+
+          <div>
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <button type="button" @click="jobForm.instrumental = !jobForm.instrumental"
+                class="w-9 h-5 rounded-full relative transition-colors flex-shrink-0"
+                :class="jobForm.instrumental ? 'bg-violet-600' : 'bg-zinc-700'">
+                <div class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm"
+                  :class="jobForm.instrumental ? 'translate-x-4' : 'translate-x-0.5'"></div>
+              </button>
+              <span class="text-sm text-zinc-300">Solo instrumental <span class="text-zinc-600">(sin voces)</span></span>
+            </label>
+          </div>
+
+        </div>
+        <div class="flex justify-between">
+          <button @click="step = 2" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-5 py-2 rounded-lg text-sm font-medium transition-colors">← Atrás</button>
+          <button @click="step = 4" class="bg-violet-600 hover:bg-violet-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- ── Step 4: Image & Video ── -->
+      <div x-show="step === 4">
+        <h2 class="text-sm font-medium text-zinc-400 mb-4">Imagen y video</h2>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5 mb-6">
+
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-2">Proveedor de imágenes</label>
+            <div class="grid grid-cols-3 gap-2">
+              <template x-for="p in imageProviders" :key="p.value">
+                <button @click="jobForm.images_provider = p.value"
+                  class="border rounded-lg px-3 py-3 text-sm transition-all text-left"
+                  :class="jobForm.images_provider === p.value
+                    ? 'border-violet-500 bg-violet-950/50 text-white'
+                    : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'">
+                  <div class="font-medium" x-text="p.label"></div>
+                  <div class="text-xs opacity-60 mt-0.5" x-text="p.note"></div>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <div x-show="jobForm.images_provider !== 'assets'">
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Número de imágenes</label>
+            <input x-model.number="jobForm.images_count" type="number" min="1" max="20"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-2">Modo visual</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button @click="jobForm.visual_mode = 'slideshow'"
+                class="border rounded-lg px-4 py-3 text-sm transition-all text-left"
+                :class="jobForm.visual_mode === 'slideshow'
+                  ? 'border-violet-500 bg-violet-950/50 text-white'
+                  : 'border-zinc-800 text-zinc-500 hover:border-zinc-700'">
+                <div class="font-medium">Slideshow</div>
+                <div class="text-xs opacity-60 mt-0.5">Alterna entre imágenes generadas</div>
+              </button>
+              <button @click="jobForm.visual_mode = 'single'"
+                class="border rounded-lg px-4 py-3 text-sm transition-all text-left"
+                :class="jobForm.visual_mode === 'single'
+                  ? 'border-violet-500 bg-violet-950/50 text-white'
+                  : 'border-zinc-800 text-zinc-500 hover:border-zinc-700'">
+                <div class="font-medium">Imagen única</div>
+                <div class="text-xs opacity-60 mt-0.5">Repite la primera imagen</div>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-zinc-400 mb-1.5">Resolución</label>
+              <select x-model="jobForm.resolution"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+                <option value="1920x1080">1920×1080 (Full HD)</option>
+                <option value="1280x720">1280×720 (HD)</option>
+                <option value="3840x2160">3840×2160 (4K)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-400 mb-1.5">FPS</label>
+              <select x-model.number="jobForm.fps"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+                <option value="1">1 FPS — mínimo CPU</option>
+                <option value="5">5 FPS</option>
+                <option value="24">24 FPS</option>
+                <option value="30">30 FPS</option>
+              </select>
+            </div>
+          </div>
+
+          <div x-show="jobForm.visual_mode === 'slideshow'">
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Duración por imagen (seg)</label>
+            <input x-model.number="jobForm.image_duration" type="number" min="1" max="300"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+        </div>
+
+        <div class="flex justify-between">
+          <button @click="step = 3" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-5 py-2 rounded-lg text-sm font-medium transition-colors">← Atrás</button>
+          <button @click="step = 5" class="bg-violet-600 hover:bg-violet-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- ── Step 5: YouTube & SEO ── -->
+      <div x-show="step === 5">
+        <h2 class="text-sm font-medium text-zinc-400 mb-4">YouTube y SEO</h2>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5 mb-6">
+
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-2">Proveedor de metadata SEO</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button @click="jobForm.seo_provider = 'local'"
+                class="border rounded-lg px-4 py-3 text-sm transition-all text-left"
+                :class="jobForm.seo_provider === 'local'
+                  ? 'border-violet-500 bg-violet-950/50 text-white'
+                  : 'border-zinc-800 text-zinc-500 hover:border-zinc-700'">
+                <div class="font-medium">Local</div>
+                <div class="text-xs opacity-60 mt-0.5">Plantillas sin IA</div>
+              </button>
+              <button @click="jobForm.seo_provider = 'gemini'"
+                class="border rounded-lg px-4 py-3 text-sm transition-all text-left"
+                :class="jobForm.seo_provider === 'gemini'
+                  ? 'border-violet-500 bg-violet-950/50 text-white'
+                  : 'border-zinc-800 text-zinc-500 hover:border-zinc-700'">
+                <div class="font-medium">Gemini</div>
+                <div class="text-xs opacity-60 mt-0.5">Requiere GEMINI_API_KEY</div>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Keyword principal para SEO</label>
+            <input x-model="jobForm.seo_keyword" type="text" placeholder="lofi beats for studying"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-2">Privacidad del video</label>
+            <div class="grid grid-cols-3 gap-2">
+              <template x-for="opt in privacyOpts" :key="opt.value">
+                <button @click="jobForm.privacy_status = opt.value"
+                  class="border rounded-lg px-3 py-3 text-sm transition-all"
+                  :class="jobForm.privacy_status === opt.value
+                    ? 'border-violet-500 bg-violet-950/50 text-white'
+                    : 'border-zinc-800 text-zinc-500 hover:border-zinc-700'">
+                  <div class="font-medium" x-text="opt.label"></div>
+                  <div class="text-xs opacity-60 mt-0.5" x-text="opt.note"></div>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <div>
+            <label class="flex items-center gap-3 cursor-pointer select-none">
+              <button type="button" @click="jobForm.upload = !jobForm.upload"
+                class="w-9 h-5 rounded-full relative transition-colors flex-shrink-0"
+                :class="jobForm.upload ? 'bg-violet-600' : 'bg-zinc-700'">
+                <div class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm"
+                  :class="jobForm.upload ? 'translate-x-4' : 'translate-x-0.5'"></div>
+              </button>
+              <div>
+                <div class="text-sm text-zinc-300">Subir automáticamente a YouTube</div>
+                <div class="text-xs text-zinc-600 mt-0.5">Requiere <code class="text-zinc-500">client_secret.json</code> configurado y OAuth completado</div>
+              </div>
+            </label>
+          </div>
+
+        </div>
+        <div class="flex justify-between">
+          <button @click="step = 4" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-5 py-2 rounded-lg text-sm font-medium transition-colors">← Atrás</button>
+          <button @click="step = 6; generatedYaml = generateYaml()"
+            class="bg-violet-600 hover:bg-violet-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+            Revisar →
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Step 6: Review & Run ── -->
+      <div x-show="step === 6">
+        <h2 class="text-sm font-medium text-zinc-400 mb-4">Revisar y ejecutar</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+
+          <!-- YAML preview -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-medium text-zinc-600">Especificación YAML generada</span>
+              <button @click="copyYaml()" class="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                x-text="copied ? '✓ Copiado' : 'Copiar'">
+              </button>
+            </div>
+            <pre class="bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-xs font-mono text-emerald-400/90 overflow-auto h-72 leading-5 whitespace-pre-wrap"
+              x-text="generatedYaml"></pre>
+          </div>
+
+          <!-- Log output -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-medium text-zinc-600">Salida del proceso</span>
+              <div class="flex items-center gap-2">
+                <div x-show="isRunning" class="w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse"></div>
+                <span x-show="isRunning" class="text-xs text-violet-400">Ejecutando…</span>
+                <span x-show="jobStatus === 'success'" class="text-xs text-green-400">✓ Completado</span>
+                <span x-show="jobStatus === 'error'" class="text-xs text-red-400">✗ Error</span>
+              </div>
+            </div>
+            <div id="log-output"
+              class="bg-zinc-950 border border-zinc-800 rounded-xl p-4 h-72 overflow-y-auto font-mono text-xs leading-5 space-y-px">
+              <div x-show="logs.length === 0" class="text-zinc-700 italic">Esperando inicio…</div>
+              <template x-for="(line, i) in logs" :key="i">
+                <div x-text="line || ' '" :class="{
+                  'text-red-400':    line.toLowerCase().includes('error') || line.toLowerCase().includes('traceback'),
+                  'text-yellow-400': line.toLowerCase().includes('warning') || line.toLowerCase().includes('warn'),
+                  'text-green-400':  line.toLowerCase().includes('done') || line.toLowerCase().includes('success') || line.toLowerCase().includes('upload'),
+                  'text-zinc-400':   true
+                }"></div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <button @click="step = 5" :disabled="isRunning"
+            class="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-300 px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+            ← Atrás
+          </button>
+          <div class="flex gap-3">
+            <template x-if="jobStatus === 'success'">
+              <button @click="tab = 'historial'; loadRuns()"
+                class="bg-green-700 hover:bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+                Ver resultado →
+              </button>
+            </template>
+            <button @click="startJob()" :disabled="isRunning"
+              class="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium transition-colors"
+              :class="isRunning
+                ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                : jobStatus === 'error'
+                  ? 'bg-orange-800 hover:bg-orange-700 text-white'
+                  : 'bg-violet-600 hover:bg-violet-500 text-white'">
+              <div x-show="isRunning" class="w-3.5 h-3.5 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin"></div>
+              <span x-text="isRunning ? 'Generando…' : jobStatus === 'error' ? '↺ Reintentar' : '▶ Iniciar generación'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ══════════════════════════════ HISTORIAL ══════════════════════════════ -->
+    <section x-show="tab === 'historial'">
+
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-xl font-semibold">Historial</h1>
+          <p class="text-sm text-zinc-500 mt-0.5">Videos generados anteriormente</p>
+        </div>
+        <button @click="loadRuns()"
+          class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5">
+          ↻ Actualizar
+        </button>
+      </div>
+
+      <template x-if="runs.length === 0">
+        <div class="text-center py-20">
+          <div class="text-5xl mb-4">📁</div>
+          <div class="text-base font-medium text-zinc-500">El historial está vacío</div>
+          <div class="text-sm text-zinc-600 mt-1">Los videos generados aparecerán aquí</div>
+        </div>
+      </template>
+
+      <div class="space-y-3">
+        <template x-for="run in runs" :key="run.slug">
+          <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div class="flex items-start justify-between mb-4">
+              <div>
+                <h3 class="font-medium" x-text="run.slug"></h3>
+                <p class="text-xs text-zinc-600 mt-0.5" x-text="formatDate(run.created_at)"></p>
+              </div>
+              <div class="flex items-center gap-2">
+                <template x-if="run.youtube_video_id">
+                  <span class="text-xs bg-red-950/60 border border-red-900 text-red-400 px-2.5 py-1 rounded-full">
+                    Publicado en YouTube
+                  </span>
+                </template>
+                <span class="text-xs px-2.5 py-1 rounded-full border"
+                  :class="run.final_video
+                    ? 'text-green-400 bg-green-950/50 border-green-900'
+                    : 'text-zinc-500 bg-zinc-800/50 border-zinc-700'"
+                  x-text="run.final_video ? 'Completado' : 'Incompleto'">
+                </span>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <template x-if="run.final_video">
+                <a :href="'/api/download?path=' + encodeURIComponent(run.final_video)" download
+                  class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  ↓ Video MP4
+                </a>
+              </template>
+              <template x-if="run.thumbnail">
+                <a :href="'/api/download?path=' + encodeURIComponent(run.thumbnail)" download
+                  class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  ↓ Thumbnail
+                </a>
+              </template>
+              <template x-if="run.metadata_path">
+                <a :href="'/api/download?path=' + encodeURIComponent(run.metadata_path)" download
+                  class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  ↓ Metadata JSON
+                </a>
+              </template>
+              <template x-if="run.final_audio">
+                <a :href="'/api/download?path=' + encodeURIComponent(run.final_audio)" download
+                  class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  ↓ Audio M4A
+                </a>
+              </template>
+              <template x-if="run.youtube_video_id">
+                <a :href="'https://www.youtube.com/watch?v=' + run.youtube_video_id" target="_blank" rel="noopener"
+                  class="flex items-center gap-1.5 bg-red-950/60 hover:bg-red-900/60 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  ▶ Ver en YouTube
+                </a>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+
+    <!-- ══════════════════════════════ CONFIGURACIÓN ══════════════════════════════ -->
+    <section x-show="tab === 'config'">
+
+      <div class="mb-6">
+        <h1 class="text-xl font-semibold">Configuración</h1>
+        <p class="text-sm text-zinc-500 mt-0.5">API keys y parámetros del sistema. Se guardan en el archivo <code class="text-zinc-400">.env</code></p>
+      </div>
+
+      <!-- ElevenLabs -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-3">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-6 h-6 rounded bg-orange-900/50 flex items-center justify-center text-orange-400 text-xs font-bold">E</div>
+          <h2 class="text-sm font-semibold">ElevenLabs</h2>
+          <span class="text-xs text-zinc-600">Proveedor de música</span>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-500 mb-1.5">API Key</label>
+          <div class="relative">
+            <input x-model="settingsForm.ELEVENLABS_API_KEY"
+              :type="showKeys.el ? 'text' : 'password'"
+              placeholder="sk_…"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 pr-20 text-sm text-white placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-500 transition-colors">
+            <button @click="showKeys.el = !showKeys.el"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+              x-text="showKeys.el ? 'Ocultar' : 'Mostrar'">
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mubert -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-3">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-6 h-6 rounded bg-blue-900/50 flex items-center justify-center text-blue-400 text-xs font-bold">M</div>
+          <h2 class="text-sm font-semibold">Mubert</h2>
+          <span class="text-xs text-zinc-600">Proveedor de música</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Customer ID</label>
+            <input x-model="settingsForm.MUBERT_CUSTOMER_ID" type="text"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Access Token</label>
+            <div class="relative">
+              <input x-model="settingsForm.MUBERT_ACCESS_TOKEN"
+                :type="showKeys.mubert ? 'text' : 'password'"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 pr-20 text-sm text-white font-mono focus:outline-none focus:border-violet-500 transition-colors">
+              <button @click="showKeys.mubert = !showKeys.mubert"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                x-text="showKeys.mubert ? 'Ocultar' : 'Mostrar'">
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gemini -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-3">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-6 h-6 rounded bg-green-900/50 flex items-center justify-center text-green-400 text-xs font-bold">G</div>
+          <h2 class="text-sm font-semibold">Google Gemini</h2>
+          <span class="text-xs text-zinc-600">Lyria (música), imágenes y SEO</span>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">API Key</label>
+            <div class="relative">
+              <input x-model="settingsForm.GEMINI_API_KEY"
+                :type="showKeys.gemini ? 'text' : 'password'"
+                placeholder="AIza…"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 pr-20 text-sm text-white placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-500 transition-colors">
+              <button @click="showKeys.gemini = !showKeys.gemini"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                x-text="showKeys.gemini ? 'Ocultar' : 'Mostrar'">
+              </button>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1.5">Music Model</label>
+              <input x-model="settingsForm.GEMINI_MUSIC_MODEL" type="text"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-violet-500 transition-colors">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1.5">Image Model</label>
+              <input x-model="settingsForm.GEMINI_IMAGE_MODEL" type="text"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-violet-500 transition-colors">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1.5">Text Model</label>
+              <input x-model="settingsForm.GEMINI_TEXT_MODEL" type="text"
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-violet-500 transition-colors">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- YouTube -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-3">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-6 h-6 rounded bg-red-900/50 flex items-center justify-center text-red-400 text-xs font-bold">▶</div>
+          <h2 class="text-sm font-semibold">YouTube</h2>
+          <span class="text-xs text-zinc-600">Subida con OAuth 2.0</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Client Secrets <span class="text-zinc-700">(ruta)</span></label>
+            <input x-model="settingsForm.YOUTUBE_CLIENT_SECRETS" type="text" placeholder="./client_secret.json"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Token File <span class="text-zinc-700">(ruta)</span></label>
+            <input x-model="settingsForm.YOUTUBE_TOKEN_FILE" type="text" placeholder="./.secrets/youtube-token.json"
+              class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-500 transition-colors">
+          </div>
+        </div>
+      </div>
+
+      <!-- Runtime -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-6 h-6 rounded bg-zinc-700 flex items-center justify-center text-zinc-400 text-xs">⚙</div>
+          <h2 class="text-sm font-semibold">Runtime</h2>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-500 mb-1.5">Directorio de salida <span class="text-zinc-700">(YMF_WORKDIR)</span></label>
+          <input x-model="settingsForm.YMF_WORKDIR" type="text" placeholder="./runs"
+            class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-500 transition-colors">
+          <p class="text-xs text-zinc-700 mt-1">Todos los videos y archivos generados se guardan aquí.</p>
+        </div>
+      </div>
+
+      <!-- Save button -->
+      <div class="flex items-center justify-between">
+        <div x-show="settingsSaved" class="flex items-center gap-2 text-green-400 text-sm">
+          <span>✓</span><span>Configuración guardada en .env</span>
+        </div>
+        <div x-show="!settingsSaved"></div>
+        <button @click="saveSettings()" :disabled="isSaving"
+          class="bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
+          <span x-text="isSaving ? 'Guardando…' : 'Guardar configuración'"></span>
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── APP LOGIC ──────────────────────────────────────────────────────────── -->
+  <script>
+  function app() {
+    return {
+      tab: 'dashboard',
+      tabs: [
+        { id: 'dashboard', label: 'Dashboard' },
+        { id: 'nuevo',     label: 'Nuevo Video' },
+        { id: 'historial', label: 'Historial' },
+        { id: 'config',    label: 'Configuración' },
+      ],
+
+      health:     null,
+      categories: {},
+      settings:   {},
+      runs:       [],
+
+      // Job wizard
+      step: 1,
+      steps: ['Categoría', 'Básicos', 'Música', 'Video', 'YouTube', 'Ejecutar'],
+      generatedYaml: '',
+      isRunning: false,
+      logs: [],
+      jobStatus: null,
+      copied: false,
+
+      jobForm: {
+        category_key:   '',
+        slug:           '',
+        title_seed:     '',
+        target_minutes: 60,
+        music_provider: 'local',
+        track_count:    4,
+        track_duration: 300,
+        mubert_playlist:'',
+        instrumental:   true,
+        images_provider:'local',
+        images_count:   4,
+        visual_mode:    'slideshow',
+        resolution:     '1920x1080',
+        fps:            1,
+        image_duration: 60,
+        seo_provider:   'local',
+        seo_keyword:    '',
+        privacy_status: 'private',
+        upload:         false,
+      },
+
+      musicProviders: [
+        { value: 'local',      label: 'Local',      note: 'Sin API key' },
+        { value: 'lyria',      label: 'Lyria',      note: 'Google Gemini' },
+        { value: 'elevenlabs', label: 'ElevenLabs', note: 'Requiere key' },
+        { value: 'mubert',     label: 'Mubert',     note: 'Requiere key' },
+      ],
+
+      imageProviders: [
+        { value: 'local',  label: 'Local',  note: 'Sin API key' },
+        { value: 'gemini', label: 'Gemini', note: 'Google AI' },
+        { value: 'assets', label: 'Assets', note: 'Archivos propios' },
+      ],
+
+      catIcons: {
+        focus_lofi:        '🎧',
+        sleep_ambient:     '🌙',
+        meditation_nature: '🌿',
+        synthwave_gaming:  '🎮',
+        piano_rain:        '🎹',
+      },
+
+      apiStatusKeys: {
+        ELEVENLABS_API_KEY: 'ElevenLabs',
+        GEMINI_API_KEY:     'Gemini',
+        MUBERT_ACCESS_TOKEN:'Mubert',
+        YOUTUBE_CLIENT_SECRETS: 'YouTube',
+      },
+
+      privacyOpts: [
+        { value: 'private',  label: 'Privado',    note: 'Solo tú' },
+        { value: 'unlisted', label: 'No listado', note: 'Con link' },
+        { value: 'public',   label: 'Público',    note: 'Para todos' },
+      ],
+
+      // Settings form
+      settingsForm: {},
+      showKeys: { el: false, mubert: false, gemini: false },
+      settingsSaved: false,
+      isSaving: false,
+
+      // ── Init ──
+      async init() {
+        await Promise.all([
+          this.loadHealth(),
+          this.loadCategories(),
+          this.loadSettings(),
+          this.loadRuns(),
+        ]);
+
+        // Auto-generate slug from title_seed
+        this.$watch('jobForm.title_seed', (val) => {
+          const generated = this.slugify(val);
+          const prev = this.slugify(val.slice(0, -1));
+          if (!this.jobForm.slug || this.jobForm.slug === prev) {
+            this.jobForm.slug = generated;
+          }
+        });
+      },
+
+      resetJob() {
+        this.logs = [];
+        this.jobStatus = null;
+        this.generatedYaml = '';
+      },
+
+      selectCategory(key, cat) {
+        this.jobForm.category_key = key;
+        if (!this.jobForm.seo_keyword && cat.primary_keywords?.length) {
+          this.jobForm.seo_keyword = cat.primary_keywords[0];
+        }
+      },
+
+      slugify(text) {
+        return (text || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '')
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 50);
+      },
+
+      // ── Data loaders ──
+      async loadHealth() {
+        try {
+          const r = await fetch('/api/health');
+          this.health = await r.json();
+        } catch {
+          this.health = { status: 'error' };
+        }
+      },
+
+      async loadCategories() {
+        try {
+          const r = await fetch('/api/categories');
+          this.categories = await r.json();
+        } catch { /* ignore */ }
+      },
+
+      async loadSettings() {
+        try {
+          const r = await fetch('/api/settings');
+          const data = await r.json();
+          this.settings = data;
+          this.settingsForm = { ...data };
+        } catch { /* ignore */ }
+      },
+
+      async loadRuns() {
+        try {
+          const r = await fetch('/api/runs');
+          this.runs = await r.json();
+        } catch { /* ignore */ }
+      },
+
+      // ── YAML generation ──
+      generateYaml() {
+        const f = this.jobForm;
+        const cat = this.categories[f.category_key] || {};
+        const keyword = f.seo_keyword || (cat.primary_keywords || [''])[0];
+
+        const lines = [
+          `job:`,
+          `  slug: ${f.slug || 'my-video'}`,
+          `  title_seed: "${f.title_seed || 'ambient music mix'}"`,
+          `  language: en`,
+          `  target_minutes: ${f.target_minutes}`,
+          ``,
+          `category_key: ${f.category_key}`,
+          ``,
+          `music:`,
+          `  provider: ${f.music_provider}`,
+          `  track_count: ${f.track_count}`,
+          `  track_duration_seconds: ${f.track_duration}`,
+          `  instrumental: ${f.instrumental}`,
+          `  output_format: wav`,
+        ];
+
+        if (f.music_provider === 'mubert' && f.mubert_playlist) {
+          lines.push(`  playlist_index: ${f.mubert_playlist}`);
+        }
+
+        lines.push(
+          ``,
+          `images:`,
+          `  provider: ${f.images_provider}`,
+          `  count: ${f.images_count}`,
+          `  aspect_ratio: "16:9"`,
+          `  image_size: "${f.resolution}"`,
+          ``,
+          `video:`,
+          `  resolution: "${f.resolution}"`,
+          `  fps: ${f.fps}`,
+          `  visual_mode: ${f.visual_mode}`,
+          `  image_duration_seconds: ${f.image_duration}`,
+          `  video_preset: ultrafast`,
+          `  audio_bitrate: 128k`,
+          `  normalize_audio: false`,
+          ``,
+          `seo:`,
+          `  provider: ${f.seo_provider}`,
+          `  primary_keyword: "${keyword}"`,
+          ``,
+          `youtube:`,
+          `  upload: ${f.upload}`,
+          `  privacy_status: ${f.privacy_status}`,
+          `  contains_synthetic_media: true`,
+          `  made_for_kids: false`,
+          `  notify_subscribers: false`,
+          `  set_thumbnail: true`,
+        );
+
+        return lines.join('\n');
+      },
+
+      async copyYaml() {
+        try {
+          await navigator.clipboard.writeText(this.generatedYaml);
+          this.copied = true;
+          setTimeout(() => { this.copied = false; }, 2000);
+        } catch { /* ignore */ }
+      },
+
+      // ── Job runner (SSE via fetch streaming) ──
+      async startJob() {
+        this.isRunning = true;
+        this.logs = [];
+        this.jobStatus = null;
+
+        try {
+          const response = await fetch('/api/jobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spec_yaml: this.generateYaml(), upload: this.jobForm.upload }),
+          });
+
+          if (!response.ok) {
+            this.logs.push(`Error HTTP ${response.status}`);
+            this.jobStatus = 'error';
+            this.isRunning = false;
+            return;
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop() ?? '';
+
+            for (const part of parts) {
+              const dataLine = part.split('\n').find(l => l.startsWith('data: '));
+              if (!dataLine) continue;
+              try {
+                const data = JSON.parse(dataLine.slice(6));
+                if (data.type === 'log' && data.text !== undefined) {
+                  this.logs.push(data.text);
+                  await this.$nextTick();
+                  const el = document.getElementById('log-output');
+                  if (el) el.scrollTop = el.scrollHeight;
+                }
+                if (data.type === 'done') {
+                  this.jobStatus = data.status || 'error';
+                }
+                if (data.type === 'error') {
+                  this.logs.push('Error: ' + data.text);
+                  this.jobStatus = 'error';
+                }
+              } catch { /* malformed chunk */ }
+            }
+          }
+
+        } catch (err) {
+          this.logs.push('Error de conexión: ' + err.message);
+          this.jobStatus = 'error';
+        }
+
+        this.isRunning = false;
+        if (this.jobStatus === 'success') await this.loadRuns();
+      },
+
+      // ── Settings save ──
+      async saveSettings() {
+        this.isSaving = true;
+        this.settingsSaved = false;
+        try {
+          const r = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: this.settingsForm }),
+          });
+          if (r.ok) {
+            this.settingsSaved = true;
+            await this.loadSettings();
+            setTimeout(() => { this.settingsSaved = false; }, 4000);
+          }
+        } catch { /* ignore */ }
+        this.isSaving = false;
+      },
+
+      formatDate(ts) {
+        if (!ts) return '';
+        return new Date(ts * 1000).toLocaleString('es-ES', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        });
+      },
+    };
+  }
+  </script>
+</body>
+</html>

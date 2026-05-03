@@ -27,6 +27,37 @@ services:
       retries: 3
       start_period: 30s
 
+  webui:
+    image: yt-music-factory:latest
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      YMF_WORKDIR: /app/runs
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      MUBERT_CUSTOMER_ID: ${MUBERT_CUSTOMER_ID:-}
+      MUBERT_ACCESS_TOKEN: ${MUBERT_ACCESS_TOKEN:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MUSIC_MODEL: ${GEMINI_MUSIC_MODEL:-lyria-3-pro-preview}
+      GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-3.1-flash-image-preview}
+      GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemini-3.1-flash-lite-preview}
+      YOUTUBE_CLIENT_SECRETS: /app/.secrets/client_secret.json
+      YOUTUBE_TOKEN_FILE: /app/.secrets/youtube-token.json
+    volumes:
+      - yt_music_factory_runs:/app/runs
+      - yt_music_factory_secrets:/app/.secrets
+    command: ["serve", "--host", "0.0.0.0", "--port", "8080"]
+    depends_on:
+      - yt-music-factory
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
 volumes:
   yt_music_factory_runs:
   yt_music_factory_secrets:

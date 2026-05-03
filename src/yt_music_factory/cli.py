@@ -41,6 +41,11 @@ def main(argv: list[str] | None = None) -> None:
     doctor = sub.add_parser("doctor", help="Check local binaries and provider environment")
     doctor.add_argument("--json", action="store_true")
 
+    serve = sub.add_parser("serve", help="Launch the web UI (requires webui extras)")
+    serve.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
+    serve.add_argument("--port", type=int, default=8080, help="Bind port (default: 8080)")
+    serve.add_argument("--reload", action="store_true", help="Auto-reload on code changes")
+
     args = parser.parse_args(argv)
     if args.command == "render":
         upload_value = True if args.upload else False if args.no_upload else None
@@ -89,6 +94,31 @@ def main(argv: list[str] | None = None) -> None:
         else:
             for key, value in report.items():
                 print(f"{key}: {value}")
+    elif args.command == "serve":
+        import sys as _sys
+        from pathlib import Path as _Path
+
+        try:
+            import uvicorn  # noqa: F401
+        except ImportError:
+            print("Error: webui dependencies not installed.")
+            print("Run: pip install -e '.[webui]'  or  pip install fastapi uvicorn")
+            _sys.exit(1)
+
+        # Ensure project root is on sys.path so `webui.server` is importable
+        _project_root = str(_Path(__file__).resolve().parent.parent.parent)
+        if _project_root not in _sys.path:
+            _sys.path.insert(0, _project_root)
+
+        import uvicorn
+
+        print(f"Starting YT Music Factory UI on http://{args.host}:{args.port}")
+        uvicorn.run(
+            "webui.server:app",
+            host=args.host,
+            port=args.port,
+            reload=args.reload,
+        )
 
 
 def doctor_report() -> dict[str, str | bool]:
