@@ -14,7 +14,7 @@ def test_load_demo_spec_and_metadata():
     assert metadata.category_id == "10"
     assert len(metadata.title) <= 100
     assert metadata.contains_synthetic_media is True
-    assert "synthetically generated" in metadata.description.lower()
+    assert "disclosure:" not in metadata.description.lower()
     assert metadata.tags
 
 

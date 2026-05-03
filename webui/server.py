@@ -398,14 +398,15 @@ def _parse_run_time(value: str | None) -> tuple[int, int] | None:
 def _next_run_at(schedule: dict, *, from_ts: float | None = None) -> float:
     now = time.time() if from_ts is None else from_ts
     run_time = _parse_run_time(schedule.get("run_time"))
-    if run_time and schedule.get("frequency_unit") == "days":
-        every_days = max(1, int(float(schedule.get("frequency_value") or 1)))
+    unit = str(schedule.get("frequency_unit") or "hours")
+    if run_time and unit in {"days", "hours"}:
+        interval_seconds = _interval_seconds(schedule)
         tz = _schedule_timezone()
         now_dt = datetime.fromtimestamp(now, tz)
         hour, minute = run_time
         candidate = now_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if candidate <= now_dt:
-            candidate += timedelta(days=every_days)
+            candidate += timedelta(seconds=interval_seconds)
         return candidate.timestamp()
     return now + _interval_seconds(schedule)
 
@@ -822,9 +823,9 @@ def create_schedule(body: ScheduleBody, tenant_id: str = DEFAULT_TENANT_ID) -> d
     schedule["created_at"] = time.time()
     schedule["updated_at"] = schedule["created_at"]
     schedule["enabled"] = bool(schedule.get("enabled", True))
-    schedule["frequency_value"] = float(schedule.get("frequency_value") or 24)
-    schedule["frequency_unit"] = schedule.get("frequency_unit") if schedule.get("frequency_unit") in SCHEDULE_UNITS else "hours"
-    if schedule.get("frequency_unit") == "days" and not schedule.get("run_time"):
+    schedule["frequency_value"] = float(schedule.get("frequency_value") or 1)
+    schedule["frequency_unit"] = schedule.get("frequency_unit") if schedule.get("frequency_unit") in SCHEDULE_UNITS else "days"
+    if schedule.get("frequency_unit") in {"days", "hours"} and not schedule.get("run_time"):
         schedule["run_time"] = "09:00"
     schedule["next_run_at"] = _next_run_at(schedule)
     schedules = _load_schedules(tenant_id)

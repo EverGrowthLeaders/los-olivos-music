@@ -710,9 +710,9 @@
             </select>
           </div>
           <div class="lg:col-span-2">
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Hora <span class="text-zinc-700">(si es diario)</span></label>
+            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Hora <span class="text-zinc-700">(días/horas)</span></label>
             <input x-model="scheduleForm.run_time" type="time"
-              :disabled="scheduleForm.frequency_unit !== 'days'"
+              :disabled="scheduleForm.frequency_unit === 'minutes'"
               class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white disabled:opacity-30 focus:outline-none focus:border-violet-500 transition-colors">
           </div>
           <div class="lg:col-span-2">
@@ -839,7 +839,7 @@
                   <span>
                     <span class="text-zinc-600">↺</span>
                     <span x-text="'Cada ' + schedule.frequency_value + ' ' + unitLabel(schedule.frequency_unit)"></span>
-                    <template x-if="schedule.frequency_unit === 'days' && schedule.run_time">
+                    <template x-if="['days', 'hours'].includes(schedule.frequency_unit) && schedule.run_time">
                       <span x-text="' a las ' + schedule.run_time"></span>
                     </template>
                   </span>
@@ -1190,8 +1190,8 @@
         name: '',
         category_key: 'focus_lofi',
         title_seed: '',
-        frequency_value: 24,
-        frequency_unit: 'hours',
+        frequency_value: 1,
+        frequency_unit: 'days',
         run_time: '09:00',
         target_minutes: 60,
         track_count: 4,

@@ -272,7 +272,7 @@ def make_thumbnail(image_file: Path, title: str, out_path: Path, resolution: tup
     for line in lines:
         draw.text((55, text_y), line, font=font, fill=(255, 255, 255, 240))
         text_y += int(font.size * 1.15) if hasattr(font, "size") else 52
-    draw.text((58, height - 55), "Original AI-assisted music mix", font=small, fill=(230, 230, 235, 220))
+    draw.text((58, height - 55), "Original music mix", font=small, fill=(230, 230, 235, 220))
     canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
     canvas = canvas.filter(ImageFilter.UnsharpMask(radius=1.0, percent=110, threshold=3))
     canvas.save(out_path, quality=92, optimize=True)

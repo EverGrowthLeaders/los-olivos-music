@@ -109,7 +109,7 @@ def _tracklist(track_count: int, track_duration_seconds: int, target_seconds: in
     elapsed = 0
     idx = 1
     while elapsed < target_seconds and idx <= max(track_count, 1):
-        lines.append(f"{_format_timestamp(elapsed)} Original AI-assisted track {idx:02d}")
+        lines.append(f"{_format_timestamp(elapsed)} Original track {idx:02d}")
         elapsed += max(1, track_duration_seconds)
         idx += 1
     return "\n".join(lines)
@@ -174,13 +174,6 @@ def build_local_metadata(
         spec.music.track_duration_seconds,
         spec.job.target_seconds,
     )
-    disclosure = (
-        "\nDisclosure: this video uses synthetically generated or AI-assisted music and "
-        "AI-assisted background artwork."
-        if spec.youtube.contains_synthetic_media
-        else ""
-    )
-
     value = category.get("audience_value", "focused listening")
     description = f"""{title}
 
@@ -191,8 +184,8 @@ Use it as background music for work, study, relaxation, creative sessions, or ca
 Chapters:
 {tracklist or "Continuous original mix"}
 
-Visuals: AI-assisted still artwork generated for this upload.
-Audio: original AI-assisted music generated for this upload.{disclosure}
+Visuals: original still artwork generated for this upload.
+Audio: original music generated for this upload.
 
 No artist voice, song title, label, or copyrighted lyric references were intentionally used in the prompts.
 
@@ -232,14 +225,14 @@ def build_gemini_metadata(
 
     model = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.1-flash-lite-preview")
     prompt = {
-        "task": "Create YouTube SEO metadata for an original AI-assisted long-form music video.",
+        "task": "Create YouTube SEO metadata for an original long-form music video.",
         "constraints": [
             "Return strict JSON only with keys: title, description, tags.",
             "Title must be <= 100 characters.",
             "Tags must be an array of short YouTube tags; no artist names; no song titles; no label names.",
-            "Description must include an AI/synthetic music disclosure.",
             "Keep the supplied chapter timestamps exactly if chapters are provided.",
             "Do not claim the music is human-composed or copyright-free unless the license is verified separately.",
+            "Do not add a separate AI disclosure paragraph; platform disclosure is handled during upload.",
         ],
         "category": category,
         "job": {
@@ -275,8 +268,6 @@ def build_gemini_metadata(
         candidate = _parse_json_object(text)
         title = clamp_title(str(candidate.get("title") or fallback.title))
         description = _with_chapters(str(candidate.get("description") or fallback.description), chapters)
-        if "synthetic" not in description.lower() and "ai" not in description.lower():
-            description += "\n\nDisclosure: this video uses synthetically generated or AI-assisted music."
         tags = _bounded_tags([str(t) for t in candidate.get("tags", [])] + fallback.tags)
         return VideoMetadata(
             title=title,
