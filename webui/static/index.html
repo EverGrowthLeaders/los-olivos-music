@@ -679,7 +679,7 @@
       <!-- Header -->
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-xl font-semibold text-white">Automatización</h1>
+          <h1 class="text-xl font-semibold text-white" x-text="editingScheduleId ? 'Editar automatización' : 'Automatización'"></h1>
           <p class="text-sm text-zinc-500 mt-0.5">Genera y sube videos en automático según la estética de cuenta.</p>
         </div>
         <button @click="loadSchedules()"
@@ -693,7 +693,8 @@
 
         <!-- Form header -->
         <div class="px-5 py-3 border-b border-zinc-800/60">
-          <p class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Nueva programación</p>
+          <p class="text-xs font-semibold text-zinc-400 uppercase tracking-wider"
+            x-text="editingScheduleId ? 'Editando programación' : 'Nueva programación'"></p>
         </div>
 
         <div class="p-5 space-y-4">
@@ -807,11 +808,16 @@
               </span>
             </button>
 
-            <!-- Create button -->
-            <button @click="createSchedule()" :disabled="isSavingSchedule"
-              class="bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors">
-              <span x-text="isSavingSchedule ? 'Creando…' : '+ Crear programación'"></span>
-            </button>
+            <div class="flex items-center gap-2">
+              <button @click="resetScheduleForm()" x-show="editingScheduleId"
+                class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                Cancelar
+              </button>
+              <button @click="saveSchedule()" :disabled="isSavingSchedule"
+                class="bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors">
+                <span x-text="isSavingSchedule ? 'Guardando…' : editingScheduleId ? 'Guardar cambios' : '+ Crear programación'"></span>
+              </button>
+            </div>
           </div>
 
         </div>
@@ -910,6 +916,10 @@
 
               <!-- Actions -->
               <div class="flex items-center gap-2 flex-shrink-0">
+                <button @click="editSchedule(schedule)"
+                  class="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                  Editar
+                </button>
                 <button @click="runScheduleNow(schedule)"
                   class="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                   ↺ Lanzar
@@ -1442,6 +1452,7 @@
       settingsSaved: false,
       isSaving: false,
       isSavingSchedule: false,
+      editingScheduleId: '',
       isSavingCategory: false,
       showCategoryModal: false,
       categoryModalTarget: 'job',
@@ -2095,6 +2106,56 @@
         };
       },
 
+      defaultScheduleForm() {
+        return {
+          name: '',
+          category_key: this.scheduleForm?.category_key || Object.keys(this.categories)[0] || 'focus_lofi',
+          title_seed: '',
+          frequency_value: 1,
+          frequency_unit: 'days',
+          run_time: '09:00',
+          target_minutes: 60,
+          track_count: 4,
+          track_duration: 180,
+          images_count: 1,
+          image_duration: 60,
+          privacy_status: 'private',
+          upload: true,
+          enabled: true,
+        };
+      },
+
+      resetScheduleForm() {
+        this.editingScheduleId = '';
+        this.scheduleForm = this.defaultScheduleForm();
+      },
+
+      editSchedule(schedule) {
+        this.editingScheduleId = schedule.id;
+        this.scheduleForm = {
+          ...this.defaultScheduleForm(),
+          name: schedule.name || '',
+          category_key: schedule.category_key || Object.keys(this.categories)[0] || 'focus_lofi',
+          title_seed: schedule.title_seed || '',
+          frequency_value: Number(schedule.frequency_value || 1),
+          frequency_unit: schedule.frequency_unit || 'days',
+          run_time: schedule.run_time || '09:00',
+          target_minutes: Number(schedule.target_minutes || 60),
+          track_count: Number(schedule.track_count || 4),
+          track_duration: Number(schedule.track_duration || 180),
+          images_count: Number(schedule.images_count || 1),
+          image_duration: Number(schedule.image_duration || 60),
+          privacy_status: schedule.privacy_status || 'private',
+          upload: schedule.upload !== false,
+          enabled: schedule.enabled !== false,
+        };
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      },
+
+      async saveSchedule() {
+        return this.editingScheduleId ? this.updateSchedule() : this.createSchedule();
+      },
+
       async createSchedule() {
         this.isSavingSchedule = true;
         try {
@@ -2104,8 +2165,24 @@
             body: JSON.stringify({ schedule: this.schedulePayload() }),
           });
           if (r.ok) {
-            this.scheduleForm.name = '';
-            this.scheduleForm.title_seed = '';
+            this.resetScheduleForm();
+            await this.loadSchedules();
+          }
+        } catch { /* ignore */ }
+        this.isSavingSchedule = false;
+      },
+
+      async updateSchedule() {
+        if (!this.editingScheduleId) return;
+        this.isSavingSchedule = true;
+        try {
+          const r = await fetch(this.api('/api/schedules/' + this.editingScheduleId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ schedule: this.schedulePayload() }),
+          });
+          if (r.ok) {
+            this.resetScheduleForm();
             await this.loadSchedules();
           }
         } catch { /* ignore */ }
