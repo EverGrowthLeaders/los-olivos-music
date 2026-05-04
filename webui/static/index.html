@@ -226,7 +226,13 @@
 
       <!-- ── Step 1: Category ── -->
       <div x-show="step === 1">
-        <h2 class="text-sm font-medium text-zinc-400 mb-4">Selecciona una categoría de contenido</h2>
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <h2 class="text-sm font-medium text-zinc-400">Selecciona una categoría de contenido</h2>
+          <button @click="openCategoryModal('job')"
+            class="bg-cyan-700 hover:bg-cyan-600 text-white px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors">
+            + Nueva categoría
+          </button>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
           <template x-for="(cat, key) in categories" :key="key">
             <button @click="selectCategory(key, cat)"
@@ -242,43 +248,15 @@
                   <span class="text-xs bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full" x-text="kw"></span>
                 </template>
               </div>
+              <div x-show="customCategories[key]" class="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+                <span class="text-[11px] text-cyan-500 font-medium">Personalizada</span>
+                <span @click.stop="openCategoryModal('job', key, cat)"
+                  class="text-[11px] text-zinc-500 hover:text-zinc-200 transition-colors">
+                  Editar
+                </span>
+              </div>
             </button>
           </template>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
-          <div class="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 class="text-sm font-semibold">Crear categoría musical</h3>
-              <p class="text-xs text-zinc-600 mt-0.5">Solo define el estilo musical. Marca, estética visual y SEO se controlan a nivel de cuenta.</p>
-            </div>
-            <button @click="resetCategoryForm()"
-              class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
-              Limpiar
-            </button>
-          </div>
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            <div>
-              <label class="block text-xs font-medium text-zinc-500 mb-1.5">Nombre</label>
-              <input x-model="categoryForm.label" type="text" placeholder="Deep Trading Focus"
-                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
-            </div>
-            <div class="lg:col-span-2">
-              <label class="block text-xs font-medium text-zinc-500 mb-1.5">Estilo musical</label>
-              <textarea x-model="categoryForm.music_prompt" rows="3"
-                placeholder="Ej: instrumental, profundo, tensión suave de mercado, bajo controlado, pads limpios, percusión mínima, sin voces..."
-                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors resize-y"></textarea>
-            </div>
-          </div>
-          <div class="flex items-center justify-end gap-2 mt-3">
-            <button @click="deleteCustomCategory()" x-show="customCategories[categoryForm.key]"
-              class="bg-red-950/60 hover:bg-red-900/70 text-red-300 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
-              Borrar
-            </button>
-            <button @click="saveCustomCategory()" :disabled="isSavingCategory"
-              class="bg-cyan-700 hover:bg-cyan-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2 rounded-lg text-xs font-medium transition-colors">
-              <span x-text="isSavingCategory ? 'Guardando...' : 'Crear y seleccionar'"></span>
-            </button>
-          </div>
         </div>
         <div class="flex justify-end">
           <button @click="step = 2" :disabled="!jobForm.category_key"
@@ -728,7 +706,13 @@
                 class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-violet-500 transition-colors">
             </div>
             <div class="col-span-2">
-              <label class="block text-xs font-medium text-zinc-500 mb-1.5">Categoría</label>
+              <div class="flex items-center justify-between gap-2 mb-1.5">
+                <label class="block text-xs font-medium text-zinc-500">Categoría</label>
+                <button @click="openCategoryModal('schedule')"
+                  class="text-xs font-medium text-cyan-500 hover:text-cyan-300 transition-colors">
+                  + Nueva
+                </button>
+              </div>
               <select x-model="scheduleForm.category_key"
                 class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors">
                 <template x-for="(cat, key) in categories" :key="key">
@@ -1306,6 +1290,63 @@
 
   </main>
 
+  <!-- ── CATEGORY MODAL ────────────────────────────────────────────────────── -->
+  <div x-show="showCategoryModal" x-transition.opacity
+    @keydown.escape.window="closeCategoryModal()"
+    class="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 py-8"
+    x-cloak>
+    <div @click="closeCategoryModal()" class="absolute inset-0"></div>
+    <div x-show="showCategoryModal" x-transition
+      class="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden">
+      <div class="flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
+        <div>
+          <h2 class="text-base font-semibold"
+            x-text="categoryForm.key ? 'Editar categoría musical' : 'Nueva categoría musical'"></h2>
+          <p class="text-xs text-zinc-600 mt-1">Define solo el estilo musical. Marca, estética visual y SEO viven en configuración de cuenta.</p>
+        </div>
+        <button @click="closeCategoryModal()"
+          class="w-8 h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors">
+          ×
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-zinc-500 mb-1.5">Nombre de categoría</label>
+          <input x-model="categoryForm.label" type="text" placeholder="Deep Trading Focus"
+            class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-cyan-500 transition-colors">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-zinc-500 mb-1.5">Estilo musical</label>
+          <textarea x-model="categoryForm.music_prompt" rows="7"
+            placeholder="Música electrónica instrumental para foco profundo, productividad y flow. Ambient electronic, chillstep, deep house suave, future garage, downtempo..."
+            class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-cyan-500 transition-colors resize-y"></textarea>
+        </div>
+
+        <div x-show="categoryError" class="text-xs text-red-400" x-text="categoryError"></div>
+      </div>
+
+      <div class="flex items-center justify-between gap-3 border-t border-zinc-800 p-5">
+        <button @click="deleteCustomCategory()" x-show="categoryForm.key && customCategories[categoryForm.key]"
+          class="bg-red-950/60 hover:bg-red-900/70 text-red-300 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+          Borrar
+        </button>
+        <div x-show="!(categoryForm.key && customCategories[categoryForm.key])"></div>
+        <div class="flex items-center gap-2">
+          <button @click="closeCategoryModal()"
+            class="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 px-4 py-2 rounded-lg text-xs font-medium transition-colors">
+            Cancelar
+          </button>
+          <button @click="saveCustomCategory()" :disabled="isSavingCategory"
+            class="bg-cyan-700 hover:bg-cyan-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-colors">
+            <span x-text="isSavingCategory ? 'Guardando...' : 'Guardar y seleccionar'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── APP LOGIC ──────────────────────────────────────────────────────────── -->
   <script>
   function app() {
@@ -1402,6 +1443,9 @@
       isSaving: false,
       isSavingSchedule: false,
       isSavingCategory: false,
+      showCategoryModal: false,
+      categoryModalTarget: 'job',
+      categoryError: '',
       categoryForm: {
         key: '',
         label: '',
@@ -1855,6 +1899,7 @@
       },
 
       resetCategoryForm() {
+        this.categoryError = '';
         this.categoryForm = {
           key: '',
           label: '',
@@ -1863,6 +1908,7 @@
       },
 
       editCategory(key, cat) {
+        this.categoryError = '';
         this.categoryForm = {
           key,
           label: cat.label || '',
@@ -1870,7 +1916,30 @@
         };
       },
 
+      openCategoryModal(target = 'job', key = '', cat = null) {
+        this.categoryModalTarget = target;
+        if (key && cat) {
+          this.editCategory(key, cat);
+        } else {
+          this.resetCategoryForm();
+        }
+        this.showCategoryModal = true;
+        this.$nextTick(() => {
+          document.querySelector('[x-model="categoryForm.label"]')?.focus();
+        });
+      },
+
+      closeCategoryModal() {
+        this.showCategoryModal = false;
+        this.categoryError = '';
+      },
+
       async saveCustomCategory() {
+        this.categoryError = '';
+        if (!this.categoryForm.label.trim() || !this.categoryForm.music_prompt.trim()) {
+          this.categoryError = 'Pon nombre y estilo musical antes de guardar.';
+          return;
+        }
         this.isSavingCategory = true;
         try {
           const r = await fetch('/api/custom-categories', {
@@ -1881,12 +1950,19 @@
               category: this.categoryPayload(),
             }),
           });
-          if (!r.ok) throw new Error('No se pudo guardar la categoría');
-          const saved = await r.json();
+          const saved = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(saved.detail || 'No se pudo guardar la categoría');
           await Promise.all([this.loadCategories(), this.loadCustomCategories()]);
           this.categoryForm.key = saved.key;
-          this.selectCategory(saved.key, saved.category);
-        } catch { /* ignore */ }
+          if (this.categoryModalTarget === 'schedule') {
+            this.scheduleForm.category_key = saved.key;
+          } else {
+            this.selectCategory(saved.key, saved.category);
+          }
+          this.closeCategoryModal();
+        } catch (err) {
+          this.categoryError = err.message || 'No se pudo guardar la categoría';
+        }
         this.isSavingCategory = false;
       },
 
@@ -1898,6 +1974,8 @@
           this.resetCategoryForm();
           await Promise.all([this.loadCategories(), this.loadCustomCategories()]);
           if (this.jobForm.category_key === deletedKey) this.jobForm.category_key = '';
+          if (this.scheduleForm.category_key === deletedKey) this.scheduleForm.category_key = Object.keys(this.categories)[0] || '';
+          this.closeCategoryModal();
         } catch { /* ignore */ }
       },
 
