@@ -11,6 +11,18 @@ from .seo import VideoMetadata
 RETRIABLE_STATUS_CODES = {500, 502, 503, 504}
 RETRIABLE_EXCEPTIONS = ()
 YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
+YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
+YOUTUBE_ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"
+YOUTUBE_MONETARY_ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
+
+
+def youtube_oauth_scopes(*, include_monetary: bool | None = None) -> list[str]:
+    if include_monetary is None:
+        include_monetary = os.getenv("YOUTUBE_ANALYTICS_MONETARY", "").lower() in {"1", "true", "yes", "on"}
+    scopes = [YOUTUBE_UPLOAD_SCOPE, YOUTUBE_READONLY_SCOPE, YOUTUBE_ANALYTICS_SCOPE]
+    if include_monetary:
+        scopes.append(YOUTUBE_MONETARY_ANALYTICS_SCOPE)
+    return scopes
 
 
 def upload_video(
@@ -78,16 +90,17 @@ def _get_youtube_service(*, client_secrets: Path | None, token_file: Path | None
         )
 
     creds = None
+    scopes = youtube_oauth_scopes()
     if token_file.exists():
-        creds = Credentials.from_authorized_user_file(str(token_file), [YOUTUBE_UPLOAD_SCOPE])
+        creds = Credentials.from_authorized_user_file(str(token_file), scopes)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             if client_secrets.exists():
-                flow = InstalledAppFlow.from_client_secrets_file(str(client_secrets), [YOUTUBE_UPLOAD_SCOPE])
+                flow = InstalledAppFlow.from_client_secrets_file(str(client_secrets), scopes)
             else:
-                flow = InstalledAppFlow.from_client_config(client_config, [YOUTUBE_UPLOAD_SCOPE])
+                flow = InstalledAppFlow.from_client_config(client_config, scopes)
             creds = flow.run_local_server(port=0)
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(creds.to_json(), encoding="utf-8")

@@ -111,6 +111,16 @@ Más detalle: [`docs/repetition_and_extension.md`](docs/repetition_and_extension
 
 ---
 
+## Flywheel creativo
+
+El dashboard incluye una pestaña **Flywheel** para sincronizar YouTube Analytics, rankear qué vídeos funcionan mejor, diagnosticar CTR/retención/watch time y aplicar recomendaciones a futuros renders por canal y categoría.
+
+Cada render guarda un `creative_manifest.json` con los prompts, timeline, miniatura y metadata usados. Las recomendaciones aprobadas se guardan en `workdir/data/analytics.sqlite` y se inyectan en los siguientes prompts de esa categoría.
+
+Más detalle: [`docs/flywheel.md`](docs/flywheel.md).
+
+---
+
 ## Render de producción con Lyria 3 Pro + Nano Banana 2
 
 1. Edita `.env`:

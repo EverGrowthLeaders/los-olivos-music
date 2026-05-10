@@ -20,6 +20,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from yt_music_factory.youtube import (
+    YOUTUBE_ANALYTICS_SCOPE,
+    YOUTUBE_READONLY_SCOPE,
+    youtube_oauth_scopes,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CATEGORIES_FILE = PROJECT_ROOT / "config" / "categories.yaml"
@@ -42,7 +47,6 @@ ASSET_STRATEGY_FILE = Path(
         "/app/.secrets/asset_strategy.json" if Path("/app").exists() else str(PROJECT_ROOT / ".secrets" / "asset_strategy.json"),
     )
 )
-YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 SCHEDULE_UNITS = {"minutes": 60, "hours": 3600, "days": 86400}
 DEFAULT_SCHEDULE_TIMEZONE = "Europe/Madrid"
 DEFAULT_TENANT_ID = "default"
@@ -59,6 +63,7 @@ SETTING_KEYS = [
     "YOUTUBE_CLIENT_ID",
     "YOUTUBE_CLIENT_SECRET",
     "YOUTUBE_REDIRECT_URI",
+    "YOUTUBE_ANALYTICS_MONETARY",
     "YMF_WORKDIR",
     "CHANNEL_THEME",
     "CHANNEL_AESTHETIC",
@@ -225,6 +230,7 @@ def _run_snapshot(run_dir: Path) -> dict | None:
     inferred = {
         "job_dir": str(run_dir),
         "metadata_path": _first_existing([run_dir / "youtube_metadata.json"]),
+        "creative_manifest_path": _first_existing([run_dir / "creative_manifest.json"]),
         "final_audio": _first_existing([render_dir / f"{slug}.m4a"]),
         "final_video": _first_existing([render_dir / f"{slug}.mp4"]),
         "thumbnail": _first_existing([render_dir / f"{slug}_thumb.jpg"]),
@@ -252,6 +258,33 @@ def _youtube_token_path(env: dict[str, str], tenant_id: str | None = DEFAULT_TEN
     if tenant_id != DEFAULT_TENANT_ID and "YOUTUBE_TOKEN_FILE" not in _tenant_env_overrides(tenant_id):
         return (_tenant_root(tenant_id) / "youtube-token.json").resolve()
     return _path_from_env(env, "YOUTUBE_TOKEN_FILE", "/app/.secrets/youtube-token.json")
+
+
+def _analytics_db_path(tenant_id: str | None = DEFAULT_TENANT_ID) -> Path:
+    return _get_workdir(tenant_id) / "data" / "analytics.sqlite"
+
+
+def _truthy(value: str | bool | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _youtube_scopes_for_env(env: dict[str, str]) -> list[str]:
+    return youtube_oauth_scopes(include_monetary=_truthy(env.get("YOUTUBE_ANALYTICS_MONETARY")))
+
+
+def _token_scopes(token_path: Path) -> list[str]:
+    if not token_path.exists():
+        return []
+    try:
+        payload = json.loads(token_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    values = payload.get("scopes") or payload.get("granted_scopes") or payload.get("scope") or []
+    if isinstance(values, str):
+        values = re.split(r"[\s,]+", values)
+    if not isinstance(values, list):
+        return []
+    return sorted({str(value).strip() for value in values if str(value).strip()})
 
 
 def _oauth_state_path(env: dict[str, str], tenant_id: str | None = DEFAULT_TENANT_ID) -> Path:
@@ -567,12 +600,15 @@ async def _run_schedule(schedule: dict, tenant_id: str | None = DEFAULT_TENANT_I
             f"as {slug}: {' '.join(cmd)}",
             flush=True,
         )
+        child_env = _merged_env(tenant_id)
+        child_env["YMF_SCHEDULE_ID"] = schedule_id
+        child_env["YMF_SCHEDULE_NAME"] = str(schedule.get("name") or schedule_id)
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=str(PROJECT_ROOT),
-            env=_merged_env(tenant_id),
+            env=child_env,
         )
         assert process.stdout is not None
         while True:
@@ -765,8 +801,19 @@ def youtube_status(request: Request, tenant_id: str = DEFAULT_TENANT_ID) -> dict
     env = _merged_env(tenant_id)
     token_path = _youtube_token_path(env, tenant_id)
     redirect_uri = _youtube_redirect_uri(request, env)
+    requested_scopes = _youtube_scopes_for_env(env)
+    token_scopes = _token_scopes(token_path)
+    missing_scopes = [scope for scope in requested_scopes if scope not in token_scopes]
+    analytics_required = [YOUTUBE_READONLY_SCOPE, YOUTUBE_ANALYTICS_SCOPE]
     return {
         "connected": token_path.exists(),
+        "analytics_connected": token_path.exists()
+        and bool(token_scopes)
+        and all(scope in token_scopes for scope in analytics_required),
+        "missing_scopes": missing_scopes,
+        "token_scopes": token_scopes,
+        "required_scopes": requested_scopes,
+        "analytics_monetary_enabled": _truthy(env.get("YOUTUBE_ANALYTICS_MONETARY")),
         "token_file": str(token_path),
         "client_configured": _youtube_client_config(env, redirect_uri) is not None,
         "redirect_uri": redirect_uri,
@@ -790,7 +837,7 @@ def start_youtube_oauth(request: Request, tenant_id: str = DEFAULT_TENANT_ID) ->
     state = secrets.token_urlsafe(32)
     flow = Flow.from_client_config(
         client_config,
-        scopes=[YOUTUBE_UPLOAD_SCOPE],
+        scopes=_youtube_scopes_for_env(env),
         state=state,
         redirect_uri=redirect_uri,
     )
@@ -841,7 +888,7 @@ def youtube_oauth_callback(request: Request, code: str | None = None, state: str
 
     flow = Flow.from_client_config(
         client_config,
-        scopes=[YOUTUBE_UPLOAD_SCOPE],
+        scopes=_youtube_scopes_for_env(env),
         state=state,
         redirect_uri=redirect_uri,
         code_verifier=saved.get("code_verifier"),
@@ -1055,6 +1102,83 @@ def get_run(slug: str, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     if snapshot is None:
         raise HTTPException(404, f"Run '{slug}' not found")
     return snapshot
+
+
+@app.get("/api/flywheel/summary")
+def flywheel_summary(tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    from yt_music_factory.analytics import AnalyticsStore
+
+    tenant_id = _ensure_tenant(tenant_id)
+    runs = list_runs(tenant_id)
+    return AnalyticsStore(_analytics_db_path(tenant_id)).summary(tenant_id=tenant_id, runs=runs)
+
+
+@app.post("/api/flywheel/sync")
+def sync_flywheel(tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    from yt_music_factory.analytics import sync_youtube_analytics
+
+    tenant_id = _ensure_tenant(tenant_id)
+    env = _merged_env(tenant_id)
+    token_path = _youtube_token_path(env, tenant_id)
+    if not token_path.exists():
+        raise HTTPException(400, "YouTube is not connected yet")
+    token_scopes = set(_token_scopes(token_path))
+    missing_scopes = [
+        scope
+        for scope in (YOUTUBE_READONLY_SCOPE, YOUTUBE_ANALYTICS_SCOPE)
+        if scope not in token_scopes
+    ]
+    if missing_scopes:
+        raise HTTPException(400, "Reconnect YouTube to grant Analytics read permissions")
+    runs = list_runs(tenant_id)
+    try:
+        return sync_youtube_analytics(
+            db_path=_analytics_db_path(tenant_id),
+            tenant_id=tenant_id,
+            runs=runs,
+            token_file=token_path,
+            include_monetary=_truthy(env.get("YOUTUBE_ANALYTICS_MONETARY")),
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, f"YouTube Analytics sync failed: {exc}") from exc
+
+
+@app.get("/api/flywheel/videos/{video_id}")
+def flywheel_video(video_id: str, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    from yt_music_factory.analytics import AnalyticsStore
+
+    tenant_id = _ensure_tenant(tenant_id)
+    try:
+        return AnalyticsStore(_analytics_db_path(tenant_id)).video_detail(
+            tenant_id=tenant_id,
+            video_id=video_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(404, f"Video '{video_id}' not found in analytics store") from exc
+
+
+@app.post("/api/flywheel/recommendations/{recommendation_id}/{action}")
+def update_flywheel_recommendation(
+    recommendation_id: str,
+    action: str,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> dict:
+    from yt_music_factory.analytics import AnalyticsStore
+
+    tenant_id = _ensure_tenant(tenant_id)
+    status = {"apply": "applied", "applied": "applied", "ignore": "ignored", "ignored": "ignored"}.get(action)
+    if status is None:
+        raise HTTPException(400, "Action must be apply or ignore")
+    store = AnalyticsStore(_analytics_db_path(tenant_id))
+    try:
+        result = store.apply_recommendation(
+            tenant_id=tenant_id,
+            recommendation_id=recommendation_id,
+            status=status,
+        )
+    except KeyError as exc:
+        raise HTTPException(404, f"Recommendation '{recommendation_id}' not found") from exc
+    return {**result, "summary": store.summary(tenant_id=tenant_id, runs=list_runs(tenant_id))}
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)

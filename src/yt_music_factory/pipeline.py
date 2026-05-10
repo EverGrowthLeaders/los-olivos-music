@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from .asset_registry import AssetRegistry, build_track_metadata
+from .analytics import apply_learning_profile_to_spec, build_creative_manifest, write_creative_manifest
 from .config import JobSpec, category_for, load_categories, load_spec, resolve_asset_paths
 from .ffmpeg import extend_clip_with_crossfade, make_audio_from_timeline, make_thumbnail, make_video
 from .providers.image import get_image_provider
@@ -27,6 +28,7 @@ class PipelineResult:
     thumbnail: Path
     metadata_path: Path
     metadata: VideoMetadata
+    creative_manifest_path: Path | None = None
     youtube_video_id: str | None = None
 
     def to_json(self) -> dict:
@@ -38,6 +40,7 @@ class PipelineResult:
             "final_video": str(self.final_video),
             "thumbnail": str(self.thumbnail),
             "metadata_path": str(self.metadata_path),
+            "creative_manifest_path": str(self.creative_manifest_path) if self.creative_manifest_path else None,
             "youtube_video_id": self.youtube_video_id,
             "chapters": [
                 {"start_seconds": chapter.start_seconds, "title": chapter.title}
@@ -75,6 +78,18 @@ def run_loaded_pipeline(
     channel_id = os.getenv("YMF_CHANNEL_ID", "default")
     policy = load_effective_strategy(channel_id=channel_id, category_key=spec.category_key, override=spec.asset_strategy)
     channel_theme = spec.channel_style.theme or category.get("label") or spec.category_key
+    learning_profile = apply_learning_profile_to_spec(
+        spec=spec,
+        category=category,
+        db_path=workdir / "data" / "analytics.sqlite",
+        channel_id=channel_id,
+    )
+    if learning_profile.get("enabled"):
+        print(
+            f"[flywheel] Applied learning profile v{learning_profile.get('version')} "
+            f"for category '{spec.category_key}'",
+            flush=True,
+        )
     registry = AssetRegistry(workdir / "data" / "assets.sqlite")
     history = registry.get_video_history(channel_id, str(channel_theme))
     other_history = registry.get_other_video_history(channel_id, str(channel_theme))
@@ -226,6 +241,20 @@ def run_loaded_pipeline(
     print("[render] Building thumbnail", flush=True)
     thumbnail = make_thumbnail(image_files[0], metadata.title, render_dir / f"{spec.job.slug}_thumb.jpg")
     print(f"[render] Thumbnail ready: {thumbnail}", flush=True)
+    creative_manifest_path = write_creative_manifest(
+        job_dir / "creative_manifest.json",
+        build_creative_manifest(
+            spec=spec,
+            category=category,
+            policy=policy,
+            timeline_manifest=timeline_manifest,
+            metadata=metadata,
+            image_files=image_files,
+            thumbnail=thumbnail,
+            learning_profile=learning_profile,
+        ),
+    )
+    print(f"[flywheel] Creative manifest ready: {creative_manifest_path}", flush=True)
 
     result = PipelineResult(
         job_dir=job_dir,
@@ -236,6 +265,7 @@ def run_loaded_pipeline(
         thumbnail=thumbnail,
         metadata_path=metadata_path,
         metadata=metadata,
+        creative_manifest_path=creative_manifest_path,
     )
     result_path = job_dir / "result.json"
     write_json(result_path, result.to_json())

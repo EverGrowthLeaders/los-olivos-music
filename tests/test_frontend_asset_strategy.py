@@ -15,3 +15,15 @@ def test_asset_strategy_frontend_controls_are_wired():
     assert "strategyCategoryKey" in html
     assert "/api/asset-strategy/estimate" in html
     assert "Mayor riesgo de repetición percibida" in html
+
+
+def test_flywheel_frontend_controls_are_wired():
+    html = Path("webui/static/index.html").read_text(encoding="utf-8")
+
+    assert "Flywheel creativo" in html
+    assert "syncFlywheel()" in html
+    assert "loadFlywheel()" in html
+    assert "applyFlywheelRecommendation" in html
+    assert "/api/flywheel/summary" in html
+    assert "/api/flywheel/sync" in html
+    assert "Analytics conectado para Flywheel" in html
