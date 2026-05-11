@@ -25,6 +25,10 @@ def youtube_oauth_scopes(*, include_monetary: bool | None = None) -> list[str]:
     return scopes
 
 
+def youtube_upload_scopes() -> list[str]:
+    return [YOUTUBE_UPLOAD_SCOPE]
+
+
 def upload_video(
     video_path: Path,
     metadata: VideoMetadata,
@@ -40,7 +44,11 @@ def upload_video(
     """
     if not video_path.exists():
         raise FileNotFoundError(video_path)
-    service = _get_youtube_service(client_secrets=client_secrets, token_file=token_file)
+    service = _get_youtube_service(
+        client_secrets=client_secrets,
+        token_file=token_file,
+        scopes=youtube_upload_scopes(),
+    )
     try:
         from googleapiclient.http import MediaFileUpload
     except Exception as exc:  # noqa: BLE001
@@ -71,7 +79,12 @@ def upload_video(
     return str(video_id)
 
 
-def _get_youtube_service(*, client_secrets: Path | None, token_file: Path | None):
+def _get_youtube_service(
+    *,
+    client_secrets: Path | None,
+    token_file: Path | None,
+    scopes: list[str] | None = None,
+):
     try:
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
@@ -90,7 +103,7 @@ def _get_youtube_service(*, client_secrets: Path | None, token_file: Path | None
         )
 
     creds = None
-    scopes = youtube_oauth_scopes()
+    scopes = scopes or youtube_upload_scopes()
     if token_file.exists():
         creds = Credentials.from_authorized_user_file(str(token_file), scopes)
     if not creds or not creds.valid:

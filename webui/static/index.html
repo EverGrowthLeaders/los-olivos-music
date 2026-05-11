@@ -642,6 +642,11 @@
                         Publicado en YouTube
                       </span>
                     </template>
+                    <template x-if="run.final_video && !run.youtube_video_id">
+                      <span class="text-xs bg-amber-950/50 border border-amber-900 text-amber-400 px-2.5 py-1 rounded-full">
+                        Pendiente de YouTube
+                      </span>
+                    </template>
                     <span class="text-xs px-2.5 py-1 rounded-full border"
                       :class="run.final_video
                         ? 'text-green-400 bg-green-950/50 border-green-900'
@@ -675,6 +680,18 @@
                       class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                       ↓ Audio M4A
                     </a>
+                  </template>
+                  <template x-if="run.log_path">
+                    <a :href="downloadUrl(run.log_path)" download
+                      class="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                      ↓ Log
+                    </a>
+                  </template>
+                  <template x-if="run.final_video && run.metadata_path && !run.youtube_video_id">
+                    <button @click="retryRunUpload(run)" :disabled="uploadingRunSlug === run.slug || !youtubeStatus.upload_connected"
+                      class="flex items-center gap-1.5 bg-red-950/60 hover:bg-red-900/60 disabled:bg-zinc-800 disabled:text-zinc-600 text-red-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                      <span x-text="uploadingRunSlug === run.slug ? 'Subiendo…' : '↥ Subir a YouTube'"></span>
+                    </button>
                   </template>
                   <template x-if="run.youtube_video_id">
                     <a :href="'https://www.youtube.com/watch?v=' + run.youtube_video_id" target="_blank" rel="noopener"
@@ -1492,6 +1509,10 @@
               :class="youtubeStatus.analytics_connected ? 'text-emerald-500' : youtubeStatus.connected ? 'text-amber-400' : 'text-zinc-700'"
               x-text="youtubeStatus.analytics_connected ? 'Analytics conectado para Flywheel' : youtubeStatus.connected ? 'Reconecta para dar permisos de Analytics' : 'Analytics pendiente de OAuth'">
             </div>
+            <div class="mt-1"
+              :class="youtubeStatus.upload_connected ? 'text-emerald-500' : 'text-red-400'"
+              x-text="youtubeStatus.upload_connected ? 'Subida a YouTube lista' : 'Falta permiso de subida a YouTube'">
+            </div>
             <div x-show="youtubeOauthError" class="text-red-400 mt-1" x-text="youtubeOauthError"></div>
           </div>
           <button @click="connectYouTube()" :disabled="isConnectingYoutube"
@@ -1630,6 +1651,7 @@
       schedules:  [],
       youtubeStatus: {},
       isConnectingYoutube: false,
+      uploadingRunSlug: '',
       youtubeOauthError: '',
       flywheel: {
         video_count: 0,
@@ -2505,6 +2527,28 @@
           await fetch(this.api('/api/schedules/' + schedule.id + '/run'), { method: 'POST' });
           await this.loadSchedules();
         } catch { /* ignore */ }
+      },
+
+      async retryRunUpload(run) {
+        if (!run?.slug) return;
+        this.uploadingRunSlug = run.slug;
+        try {
+          const r = await fetch(this.api('/api/runs/' + encodeURIComponent(run.slug) + '/upload'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ set_thumbnail: true }),
+          });
+          if (!r.ok) {
+            const detail = await r.json().catch(() => ({}));
+            console.error('YouTube upload failed', detail);
+          }
+          await this.loadRuns();
+          await this.loadSchedules();
+          await this.loadYouTubeStatus();
+        } catch (err) {
+          console.error('YouTube upload failed', err);
+        }
+        this.uploadingRunSlug = '';
       },
 
       async deleteSchedule(schedule) {

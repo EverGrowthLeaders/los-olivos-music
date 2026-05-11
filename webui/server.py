@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from yt_music_factory.youtube import (
     YOUTUBE_ANALYTICS_SCOPE,
     YOUTUBE_READONLY_SCOPE,
+    YOUTUBE_UPLOAD_SCOPE,
     youtube_oauth_scopes,
 )
 
@@ -213,6 +214,12 @@ def _first_existing(paths: list[Path]) -> str | None:
     return None
 
 
+def _append_log_line(log_path: Path, text: str) -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(text.rstrip("\n") + "\n")
+
+
 def _run_snapshot(run_dir: Path) -> dict | None:
     result_file = run_dir / "result.json"
     data: dict = {}
@@ -234,6 +241,7 @@ def _run_snapshot(run_dir: Path) -> dict | None:
         "final_audio": _first_existing([render_dir / f"{slug}.m4a"]),
         "final_video": _first_existing([render_dir / f"{slug}.mp4"]),
         "thumbnail": _first_existing([render_dir / f"{slug}_thumb.jpg"]),
+        "log_path": _first_existing([run_dir / "job.log"]),
     }
     inferred["audio_files"] = data.get("audio_files") or [
         str(path) for path in sorted((run_dir / "audio").glob("*")) if path.is_file()
@@ -577,6 +585,9 @@ async def _run_schedule(schedule: dict, tenant_id: str | None = DEFAULT_TENANT_I
         return
     _running_schedule_ids.add(run_key)
     spec_yaml, slug = _schedule_spec_yaml(schedule, tenant_id)
+    run_dir = _get_workdir(tenant_id) / slug
+    log_path = run_dir / "job.log"
+    run_dir.mkdir(parents=True, exist_ok=True)
     _update_schedule(
         schedule_id,
         {
@@ -585,6 +596,10 @@ async def _run_schedule(schedule: dict, tenant_id: str | None = DEFAULT_TENANT_I
             "last_slug": slug,
         },
         tenant_id,
+    )
+    _append_log_line(
+        log_path,
+        f"[scheduler] Starting tenant={tenant_id} '{schedule.get('name') or schedule_id}' as {slug}",
     )
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
@@ -600,6 +615,7 @@ async def _run_schedule(schedule: dict, tenant_id: str | None = DEFAULT_TENANT_I
             f"as {slug}: {' '.join(cmd)}",
             flush=True,
         )
+        _append_log_line(log_path, f"[scheduler] Command: {' '.join(cmd)}")
         child_env = _merged_env(tenant_id)
         child_env["YMF_SCHEDULE_ID"] = schedule_id
         child_env["YMF_SCHEDULE_NAME"] = str(schedule.get("name") or schedule_id)
@@ -615,9 +631,12 @@ async def _run_schedule(schedule: dict, tenant_id: str | None = DEFAULT_TENANT_I
             line = await process.stdout.readline()
             if not line:
                 break
-            print(f"[schedule:{tenant_id}:{schedule_id}] {line.decode('utf-8', errors='replace').rstrip()}", flush=True)
+            text = line.decode("utf-8", errors="replace").rstrip()
+            _append_log_line(log_path, text)
+            print(f"[schedule:{tenant_id}:{schedule_id}] {text}", flush=True)
         await process.wait()
         status = "success" if process.returncode == 0 else "error"
+        _append_log_line(log_path, f"[scheduler] Finished status={status} code={process.returncode}")
         _update_schedule(
             schedule_id,
             {
@@ -631,6 +650,7 @@ async def _run_schedule(schedule: dict, tenant_id: str | None = DEFAULT_TENANT_I
         )
         print(f"[scheduler] Finished tenant={tenant_id} '{schedule.get('name') or schedule_id}' status={status}", flush=True)
     except Exception as exc:
+        _append_log_line(log_path, f"[scheduler] Failed: {exc}")
         _update_schedule(
             schedule_id,
             {
@@ -805,8 +825,11 @@ def youtube_status(request: Request, tenant_id: str = DEFAULT_TENANT_ID) -> dict
     token_scopes = _token_scopes(token_path)
     missing_scopes = [scope for scope in requested_scopes if scope not in token_scopes]
     analytics_required = [YOUTUBE_READONLY_SCOPE, YOUTUBE_ANALYTICS_SCOPE]
+    upload_connected = token_path.exists() and (not token_scopes or YOUTUBE_UPLOAD_SCOPE in token_scopes)
     return {
         "connected": token_path.exists(),
+        "upload_connected": upload_connected,
+        "upload_missing_scopes": [] if upload_connected else [YOUTUBE_UPLOAD_SCOPE],
         "analytics_connected": token_path.exists()
         and bool(token_scopes)
         and all(scope in token_scopes for scope in analytics_required),
@@ -1104,6 +1127,96 @@ def get_run(slug: str, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     return snapshot
 
 
+class RunUploadBody(BaseModel):
+    set_thumbnail: bool = True
+
+
+@app.post("/api/runs/{slug}/upload")
+async def upload_existing_run(slug: str, body: RunUploadBody, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    tenant_id = _ensure_tenant(tenant_id)
+    workdir = _get_workdir(tenant_id)
+    run_dir = (workdir / slug).resolve()
+    try:
+        run_dir.relative_to(workdir.resolve())
+    except ValueError as exc:
+        raise HTTPException(403, "Run is outside workdir") from exc
+
+    snapshot = _run_snapshot(run_dir)
+    if snapshot is None:
+        raise HTTPException(404, f"Run '{slug}' not found")
+    if snapshot.get("youtube_video_id"):
+        return {"status": "already_uploaded", "youtube_video_id": snapshot["youtube_video_id"], "run": snapshot}
+    if not snapshot.get("final_video") or not snapshot.get("metadata_path"):
+        raise HTTPException(400, "Run does not have a rendered video and metadata ready")
+
+    env = _merged_env(tenant_id)
+    token_path = _youtube_token_path(env, tenant_id)
+    if not token_path.exists():
+        raise HTTPException(400, "YouTube OAuth token is missing. Reconnect YouTube first.")
+
+    log_path = run_dir / "job.log"
+    cmd = _ymf_cmd() + [
+        "upload",
+        str(snapshot["final_video"]),
+        str(snapshot["metadata_path"]),
+        "--token-file",
+        str(token_path),
+    ]
+    thumbnail = snapshot.get("thumbnail")
+    if body.set_thumbnail and thumbnail:
+        cmd.extend(["--thumbnail", str(thumbnail)])
+
+    _append_log_line(log_path, "[youtube] Manual upload retry started")
+    _append_log_line(log_path, f"[youtube] Command: {' '.join(cmd)}")
+    child_env = dict(env)
+    child_env["PYTHONUNBUFFERED"] = "1"
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        cwd=str(PROJECT_ROOT),
+        env=child_env,
+    )
+    assert process.stdout is not None
+    output_lines: list[str] = []
+    while True:
+        line = await process.stdout.readline()
+        if not line:
+            break
+        text = line.decode("utf-8", errors="replace").rstrip()
+        output_lines.append(text)
+        _append_log_line(log_path, text)
+        print(f"[upload:{tenant_id}:{slug}] {text}", flush=True)
+    await process.wait()
+
+    if process.returncode != 0:
+        tail = "\n".join(output_lines[-30:])
+        _append_log_line(log_path, f"[youtube] Manual upload retry failed code={process.returncode}")
+        raise HTTPException(500, {"message": "YouTube upload failed", "returncode": process.returncode, "log_tail": tail})
+
+    video_id = None
+    for text in reversed(output_lines):
+        match = re.search(r'"video_id"\s*:\s*"([^"]+)"', text)
+        if match:
+            video_id = match.group(1)
+            break
+    if not video_id:
+        tail = "\n".join(output_lines[-30:])
+        raise HTTPException(500, {"message": "Upload finished but no video_id was found", "log_tail": tail})
+
+    result_path = run_dir / "result.json"
+    result = {}
+    if result_path.exists():
+        try:
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+        except Exception:
+            result = {}
+    result["youtube_video_id"] = video_id
+    result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _append_log_line(log_path, f"[youtube] Manual upload retry complete: {video_id}")
+    return {"status": "uploaded", "youtube_video_id": video_id, "run": _run_snapshot(run_dir)}
+
+
 @app.get("/api/flywheel/summary")
 def flywheel_summary(tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     from yt_music_factory.analytics import AnalyticsStore
@@ -1204,6 +1317,22 @@ async def run_job(body: JobBody, tenant_id: str = DEFAULT_TENANT_ID) -> Streamin
             f.write(body.spec_yaml)
             tmp_path = f.name
 
+        log_buffer: list[str] = []
+        log_path: Path | None = None
+
+        def remember_log(text: str) -> None:
+            nonlocal log_path
+            log_buffer.append(text)
+            if log_path is None:
+                match = re.search(r"\[pipeline\] Job '([^']+)' started", text)
+                if match:
+                    log_path = _get_workdir(tenant_id) / match.group(1) / "job.log"
+                    for buffered in log_buffer:
+                        _append_log_line(log_path, buffered)
+                    return
+            if log_path is not None:
+                _append_log_line(log_path, text)
+
         try:
             workdir = str(_get_workdir(tenant_id))
             flag = "--upload" if body.upload else "--no-upload"
@@ -1227,15 +1356,19 @@ async def run_job(body: JobBody, tenant_id: str = DEFAULT_TENANT_ID) -> Streamin
                 if not line:
                     break
                 text = line.decode("utf-8", errors="replace").rstrip()
+                remember_log(text)
                 print(f"[job] {text}", flush=True)
                 yield f"data: {json.dumps({'type': 'log', 'text': text})}\n\n"
 
             await process.wait()
             status = "success" if process.returncode == 0 else "error"
+            remember_log(f"[webui] Job subprocess finished: status={status}, code={process.returncode}")
             print(f"[webui] Job subprocess finished: status={status}, code={process.returncode}", flush=True)
             yield f"data: {json.dumps({'type': 'done', 'status': status, 'code': process.returncode})}\n\n"
 
         except Exception as exc:
+            if log_path is not None:
+                _append_log_line(log_path, f"[webui] Job failed before completion: {exc}")
             print(f"[webui] Job failed before completion: {exc}", flush=True)
             yield f"data: {json.dumps({'type': 'error', 'text': str(exc)})}\n\n"
         finally:
