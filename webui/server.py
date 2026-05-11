@@ -280,6 +280,12 @@ def _youtube_scopes_for_env(env: dict[str, str]) -> list[str]:
     return youtube_oauth_scopes(include_monetary=_truthy(env.get("YOUTUBE_ANALYTICS_MONETARY")))
 
 
+def _youtube_scopes_for_mode(env: dict[str, str], mode: str | None) -> list[str]:
+    if mode == "upload":
+        return [YOUTUBE_UPLOAD_SCOPE]
+    return _youtube_scopes_for_env(env)
+
+
 def _token_scopes(token_path: Path) -> list[str]:
     if not token_path.exists():
         return []
@@ -844,7 +850,7 @@ def youtube_status(request: Request, tenant_id: str = DEFAULT_TENANT_ID) -> dict
 
 
 @app.post("/api/youtube/oauth/start")
-def start_youtube_oauth(request: Request, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+def start_youtube_oauth(request: Request, tenant_id: str = DEFAULT_TENANT_ID, mode: str = "full") -> dict:
     try:
         from google_auth_oauthlib.flow import Flow
     except Exception as exc:  # noqa: BLE001
@@ -856,11 +862,12 @@ def start_youtube_oauth(request: Request, tenant_id: str = DEFAULT_TENANT_ID) ->
     client_config = _youtube_client_config(env, redirect_uri)
     if client_config is None:
         raise HTTPException(400, "Configure YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET first")
+    scopes = _youtube_scopes_for_mode(env, mode)
 
     state = secrets.token_urlsafe(32)
     flow = Flow.from_client_config(
         client_config,
-        scopes=_youtube_scopes_for_env(env),
+        scopes=scopes,
         state=state,
         redirect_uri=redirect_uri,
     )
@@ -878,12 +885,13 @@ def start_youtube_oauth(request: Request, tenant_id: str = DEFAULT_TENANT_ID) ->
                 "tenant_id": tenant_id,
                 "redirect_uri": redirect_uri,
                 "code_verifier": getattr(flow, "code_verifier", None),
+                "scopes": scopes,
             }
         )
         + "\n",
         encoding="utf-8",
     )
-    return {"authorization_url": authorization_url, "redirect_uri": redirect_uri}
+    return {"authorization_url": authorization_url, "redirect_uri": redirect_uri, "mode": mode, "scopes": scopes}
 
 
 @app.get("/api/youtube/oauth/callback", response_class=HTMLResponse)
@@ -911,7 +919,7 @@ def youtube_oauth_callback(request: Request, code: str | None = None, state: str
 
     flow = Flow.from_client_config(
         client_config,
-        scopes=_youtube_scopes_for_env(env),
+        scopes=saved.get("scopes") or _youtube_scopes_for_env(env),
         state=state,
         redirect_uri=redirect_uri,
         code_verifier=saved.get("code_verifier"),
